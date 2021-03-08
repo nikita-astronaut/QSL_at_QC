@@ -1,7 +1,8 @@
 import numpy as np
-import qutip as qtp
 import scipy as sp
-
+from scipy import sparse
+import lattice_symmetries as ls
+import scipy
 
 sz = np.array([[1, 0], \
                [0, -1]])
@@ -21,38 +22,63 @@ s0_sparse = sp.sparse.csr_matrix(s0)
 
 
 
+
+
 def get_SS_gate(i, j, n_qubits, pauli_sparse, phase):
-    SS = sp.sparse.eye(1, dtype=np.complex128)
+    site_min = np.min([i, j])
+    site_max = np.max([i, j])
+    left_string = site_min
+    middle_string = site_max - site_min - 1
+    right_string = n_qubits - site_max - 1
 
-    for k in range(n_qubits):
-        SS = scipy.sparse.kron(SS, pauli_sparse if k in [i, j] else s0_sparse)
+    left_string = sp.sparse.eye(2 ** left_string, dtype=np.complex128)
+    middle_string = sp.sparse.eye(2 ** middle_string, dtype=np.complex128)
+    right_string = sp.sparse.eye(2 ** right_string, dtype=np.complex128)
 
-    return sp.sparse.linalg.expm(SS * phase)
+    string = left_string * 1.0
+    string = sp.sparse.kron(string, pauli_sparse)
+    string = sp.sparse.kron(string, middle_string)
+    string = sp.sparse.kron(string, pauli_sparse)
+    string = sp.sparse.kron(string, right_string)
+
+
+    return sp.sparse.linalg.expm(1.0j * phase * string)
+
 
 def get_S_gate(i, n_qubits, pauli_sparse, phase):
-    S = sp.sparse.eye(1, dtype=np.complex128)
+    left_string = i
+    right_string = n_qubits - i - 1
 
-    for k in range(n_qubits):
-        S = scipy.sparse.kron(S, pauli_sparse if k == i else s0_sparse)
+    left_string = sp.sparse.eye(2 ** left_string, dtype=np.complex128)
+    right_string = sp.sparse.eye(2 ** right_string, dtype=np.complex128)
 
-    return sp.sparse.linalg.expm(S * phase)
+    string = left_string * 1.0
+    string = sp.sparse.kron(string, sp.sparse.linalg.expm(1.0j * phase * pauli_sparse.tocsc()))
+    string = sp.sparse.kron(string, right_string)
+
+    return string.tocsc()
 
 
 class Circuit(object):
     def __init__(self, n_qubits, **kwargs):
         self.n_qubits = n_qubits
-        self._unitary = self._get_unitary_matrix(**kwargs)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
+        self.basis.build()
+
+        self._unitaries = self._get_unitaries(**kwargs)
 
     def __call__(self):
-        state_alldown = np.zeros(2 ** n_qubits, dtype=np.complex128)
-        state_alldown[0] = 1.
+        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
+        state[0] = 1.
+        for gate in self._unitaries:
+            state = gate(state)
 
-        return self._unitary.dot(state_alldown)
+        return state
 
     def _define_parameter_site_bonds(self, **kwargs):
         raise NotImplementedError()
 
-    def _get_unitary_matrix(self, **kwargs):
+    def _get_unitaries(self, **kwargs):
         raise NotImplementedError()
 
     def _initialize_parameters(self):
@@ -86,7 +112,7 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
         self.theta_i_sites, self.theta_XY_lm_bonds, self.theta_Z_lm_bonds = self._define_parameter_site_bonds()
 
         self.theta_i, self.theta_XY_lm, self.theta_Z_lm = self._initialize_parameters()
-        return super().__init__(Lx * Ly, self.theta_i, self.theta_XY_lm, self.theta_Z_lm)
+        return super().__init__(Lx * Ly)
 
     def _define_parameter_site_bonds(self):
         theta_i_sites = np.arange(self.Lx * self.Ly)
@@ -148,31 +174,46 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
         return np.around(distances, decimals=4)
 
 
-    def _get_unitary_matrix(self):
+    def _get_unitaries(self):
         n_qubits = self.Lx * self.Ly
-        unitary = sp.sparse.eye(2 ** n_qubits, dtype=np.complex128)
-        for ti, i in zip(self.theta_i, self.theta_i_sites):
-            unitary = unitary.dot(get_S_gate(i, n_qubits, sz_sparse, ti))
+        #unitary = sp.sparse.eye(2 ** n_qubits, dtype=np.complex128).tocsc()
+        #for ti, i in zip(self.theta_i, self.theta_i_sites):
+        #    unitary = unitary.dot(get_S_gate(i, n_qubits, sz_sparse, ti))
 
-        for t_perp_lm, t_Z_lm, bond in zip(self.theta_perp_lm, self.theta_Z_lm, self.theta_Z_lm_bonds):
-            unitary = unitary.dot(get_SS_gate(i, j, n_qubits, sx_sparse, t_perp_lm))
-            unitary = unitary.dot(get_SS_gate(i, j, n_qubits, sy_sparse, t_perp_lm))
-            unitary = unitary.dot(get_SS_gate(i, j, n_qubits, sz_sparse, t_Z_lm))
-        return unitary
+        #for t_perp_lm, t_Z_lm, bond in zip(self.theta_XY_lm, self.theta_Z_lm, self.theta_Z_lm_bonds):
+        #    unitary = unitary.dot(get_SS_gate(*bond, n_qubits, sx_sparse, t_perp_lm))
+        #    unitary = unitary.dot(get_SS_gate(*bond, n_qubits, sy_sparse, t_perp_lm))
+        #    unitary = unitary.dot(get_SS_gate(*bond, n_qubits, sz_sparse, t_Z_lm))
+
+        unitaries = []
+        for ti, i in zip(self.theta_i, self.theta_i_sites):
+            x, y = i % self.Lx, i // self.Lx 
+            matrix = scipy.linalg.expm(1.0j * (np.pi / 4. * (1 + (-1) ** (x + y)) + ti) * sx)
+            unitaries.append(ls.Operator(self.basis, [ls.Interaction(matrix, [(i,)])]))
+
+        for t_perp_lm, t_Z_lm, bond in zip(self.theta_XY_lm, self.theta_Z_lm, self.theta_Z_lm_bonds):
+            matrix = scipy.linalg.expm(1.0j * t_perp_lm * (np.kron(sx, sx) + np.kron(sy, sy)))
+            unitaries.append(ls.Operator(self.basis, [ls.Interaction(matrix, [(bond[0], bond[1])])]))
+
+            matrix = scipy.linalg.expm(1.0j * t_Z_lm * np.kron(sz, sz))
+            unitaries.append(ls.Operator(self.basis, [ls.Interaction(matrix, [(bond[0], bond[1])])]))
+        return unitaries
 
 
     def _initialize_parameters(self):
-        theta_i = []
         theta_XY_lm = np.zeros(len(self.theta_XY_lm_bonds), dtype=np.float64)
         theta_Z_lm = np.zeros(len(self.theta_Z_lm_bonds), dtype=np.float64)
 
+
+        theta_i = []
         for x in range(self.Lx):
             for y in range(self.Ly):
-                theta_i.append(np.pi * (-1) ** (x + y))
+                theta_i.append(np.pi / 2. * (-1) ** (x + y))
+
         return np.array(theta_i), theta_XY_lm, theta_Z_lm
 
     def set_parameters(self, parameters):
         self.theta_i, self.theta_XY_lm, self.theta_Z_lm = self._unpack_parameters(parameters)
-        self._unitary = self._get_unitary_matrix()
+        self._unitaries = self._get_unitaries()
 
         return
