@@ -7,7 +7,7 @@ from scipy.optimize import differential_evolution, minimize
 
 class opt_parameters:
     def __init__(self):
-        self.Lx, self.Ly = 4, 4
+        self.Lx, self.Ly = 2, 4
         
         self.hamiltonian = hamiltonians.HeisenbergSquareNNBipartiteSparseOBC;
         self.ham_params_dict = {'n_qubits' : self.Lx * self.Ly, 'Lx' : self.Lx, 'Ly': self.Ly, 'j_pm' : -1., 'j_zz' : 1.}

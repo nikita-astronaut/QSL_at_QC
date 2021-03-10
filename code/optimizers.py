@@ -5,6 +5,7 @@ import utils
 def _circuit_energy(param, circuit, hamiltonian, config):
     circuit.set_parameters(param)
     state = circuit()
+    assert np.isclose(state.conj().dot(state), 1.0)
     #for i in range(len(state)):
     #    print(utils.index_to_spin(np.array([i]), number_spins = 16), state[i])
     print(np.dot(np.conj(state), hamiltonian(state)).real)
@@ -29,6 +30,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
     return circuit
 
 def get_all_derivatives(cur_params, circuit, hamiltonian, config):
+    return circuit.get_all_derivatives(hamiltonian)
     state = circuit()
     #print(np.array([2 * np.dot(state.conj(), hamiltonian(circuit.derivative(i))).real \
     #                 for i in range(len(cur_params))]))

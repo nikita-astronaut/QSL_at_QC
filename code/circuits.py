@@ -45,6 +45,24 @@ class Circuit(object):
 
         return state
 
+    def get_all_derivatives(self, hamiltonian):
+        LEFT = hamiltonian(self.__call__())
+        for u_herm in reversed(self.unitaries_herm):
+            LEFT = u_herm(LEFT)
+        LEFT = LEFT.conj()
+
+        RIGHT = self._initial_state()
+
+        grads = []
+        for i in range(len(self.derivatives)):
+            # assert np.allclose(LEFT, self.unitaries[i](self.unitaries_herm[i](LEFT)))
+            grads.append(np.dot(LEFT, self.derivatives[i](RIGHT)))
+
+            RIGHT = self.unitaries[i](RIGHT)
+            LEFT = (self.unitaries[i](LEFT.conj())).conj()
+
+        return 2 * np.array(grads).real
+
     def _get_derivative_idx(self, param_idx):
         raise NotImplementedError()
 
@@ -98,20 +116,18 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
 
 
         ### defining of unitaries ###
-        self.unitaries = []
-        self.derivatives = []
-        for m, loc, par in zip(self.matrices, self.locs, self.params):
-            self.unitaries.append(ls.Operator(self.basis, \
-                [ls.Interaction(scipy.linalg.expm(1.0j * par * m), [loc])]))
-            self.derivatives.append(ls.Operator(self.basis, [ls.Interaction(1.0j * m, [loc])]))
+        self._refresh_uniraties_derivatives()
         return
 
     def _refresh_uniraties_derivatives(self):
         self.unitaries = []
+        self.unitaries_herm = []
         self.derivatives = []
         for m, loc, par in zip(self.matrices, self.locs, self.params):
             self.unitaries.append(ls.Operator(self.basis, \
                 [ls.Interaction(scipy.linalg.expm(1.0j * par * m), [loc])]))
+            self.unitaries_herm.append(ls.Operator(self.basis, \
+                [ls.Interaction(scipy.linalg.expm(-1.0j * par * m), [loc])]))
             self.derivatives.append(ls.Operator(self.basis, [ls.Interaction(1.0j * m, [loc])]))
         return 
 
