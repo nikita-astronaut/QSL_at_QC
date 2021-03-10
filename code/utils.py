@@ -1,5 +1,7 @@
 import os
 import sys
+import numpy as np
+
 def index_to_spin(index, number_spins = 16):
     return (((index.reshape(-1, 1) & (1 << np.arange(number_spins)))) > 0)
 

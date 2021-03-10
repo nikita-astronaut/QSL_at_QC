@@ -3,6 +3,7 @@ import scipy as sp
 from scipy import sparse
 import lattice_symmetries as ls
 import scipy
+import utils
 
 sz = np.array([[1, 0], \
                [0, -1]])
@@ -15,49 +16,6 @@ sx = np.array(
 sy = np.array([[0, 1.0j], [-1.0j, 0]])
 
 s0 = np.eye(2)
-sx_sparse = sp.sparse.csr_matrix(sx)
-sy_sparse = sp.sparse.csr_matrix(sy)
-sz_sparse = sp.sparse.csr_matrix(sz)
-s0_sparse = sp.sparse.csr_matrix(s0)
-
-
-
-
-
-def get_SS_gate(i, j, n_qubits, pauli_sparse, phase):
-    site_min = np.min([i, j])
-    site_max = np.max([i, j])
-    left_string = site_min
-    middle_string = site_max - site_min - 1
-    right_string = n_qubits - site_max - 1
-
-    left_string = sp.sparse.eye(2 ** left_string, dtype=np.complex128)
-    middle_string = sp.sparse.eye(2 ** middle_string, dtype=np.complex128)
-    right_string = sp.sparse.eye(2 ** right_string, dtype=np.complex128)
-
-    string = left_string * 1.0
-    string = sp.sparse.kron(string, pauli_sparse)
-    string = sp.sparse.kron(string, middle_string)
-    string = sp.sparse.kron(string, pauli_sparse)
-    string = sp.sparse.kron(string, right_string)
-
-
-    return sp.sparse.linalg.expm(1.0j * phase * string)
-
-
-def get_S_gate(i, n_qubits, pauli_sparse, phase):
-    left_string = i
-    right_string = n_qubits - i - 1
-
-    left_string = sp.sparse.eye(2 ** left_string, dtype=np.complex128)
-    right_string = sp.sparse.eye(2 ** right_string, dtype=np.complex128)
-
-    string = left_string * 1.0
-    string = sp.sparse.kron(string, sp.sparse.linalg.expm(1.0j * phase * pauli_sparse.tocsc()))
-    string = sp.sparse.kron(string, right_string)
-
-    return string.tocsc()
-
 
 class Circuit(object):
     def __init__(self, n_qubits, **kwargs):
@@ -65,15 +23,30 @@ class Circuit(object):
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
         self.basis.build()
 
-        self._unitaries = self._get_unitaries(**kwargs)
-
     def __call__(self):
-        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state[0] = 1.
-        for gate in self._unitaries:
+        state = self._initial_state()
+        for gate in self.unitaries:
             state = gate(state)
 
         return state
+
+    def derivative(self, param_idx):
+        # print(param_idx, flush=True)
+        dev = self._get_derivative_idx(param_idx)
+
+        state = self._initial_state()
+        for gate in self.unitaries[:param_idx]:
+            state = gate(state)
+
+        state = dev(state)
+
+        for gate in self.unitaries[param_idx:]:
+            state = gate(state)
+
+        return state
+
+    def _get_derivative_idx(self, param_idx):
+        raise NotImplementedError()
 
     def _define_parameter_site_bonds(self, **kwargs):
         raise NotImplementedError()
@@ -96,6 +69,12 @@ class Circuit(object):
     def _pack_parameters(self):
         raise NotImplementedError()
 
+    def _get_all_derivatives(self):
+        raise NotImplementedError()
+
+    def _initial_state(self):
+        raise NotImplementedError()
+
 class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
     '''
         constructs unitary circuit
@@ -107,17 +86,38 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
         self.Lx = Lx
         self.Ly = Ly
         self.n_lm_neighbors = n_lm_neighbors
+        super().__init__(Lx * Ly)
 
         self.pairwise_distances = self.get_pairwise_distances()
-        self.theta_i_sites, self.theta_XY_lm_bonds, self.theta_Z_lm_bonds = self._define_parameter_site_bonds()
+        self.i_sites, self.pair_bonds = self._define_parameter_site_bonds()
 
-        self.theta_i, self.theta_XY_lm, self.theta_Z_lm = self._initialize_parameters()
-        return super().__init__(Lx * Ly)
+
+        ### defining operator locs ###
+        self.matrices, self.locs = self._get_matrices_locs()
+        self.params = self._initialize_parameters()
+
+
+        ### defining of unitaries ###
+        self.unitaries = []
+        self.derivatives = []
+        for m, loc, par in zip(self.matrices, self.locs, self.params):
+            self.unitaries.append(ls.Operator(self.basis, \
+                [ls.Interaction(scipy.linalg.expm(1.0j * par * m), [loc])]))
+            self.derivatives.append(ls.Operator(self.basis, [ls.Interaction(1.0j * m, [loc])]))
+        return
+
+    def _refresh_uniraties_derivatives(self):
+        self.unitaries = []
+        self.derivatives = []
+        for m, loc, par in zip(self.matrices, self.locs, self.params):
+            self.unitaries.append(ls.Operator(self.basis, \
+                [ls.Interaction(scipy.linalg.expm(1.0j * par * m), [loc])]))
+            self.derivatives.append(ls.Operator(self.basis, [ls.Interaction(1.0j * m, [loc])]))
+        return 
 
     def _define_parameter_site_bonds(self):
-        theta_i_sites = np.arange(self.Lx * self.Ly)
-        theta_XY_lm_bonds = []
-        theta_Z_lm_bonds = []
+        i_sites = np.arange(self.Lx * self.Ly)
+        pair_bonds = []
 
         unique_distances = np.sort(np.unique(self.pairwise_distances.flatten()))
 
@@ -133,19 +133,16 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
                 if separation >= self.n_lm_neighbors:
                     continue
 
-                theta_XY_lm_bonds.append((l, m))
-                theta_Z_lm_bonds.append((l, m))
+                pair_bonds.append((l, m))
 
-        return theta_i_sites, theta_XY_lm_bonds, theta_Z_lm_bonds
+        return i_sites, pair_bonds
 
 
     def _unpack_parameters(self, parameters):
-        return parameters[:len(self.theta_i_sites)], \
-               parameters[len(self.theta_i_sites):-len(self.theta_Z_lm)], \
-               parameters[-len(self.theta_Z_lm):]
+        return parameters
 
     def _pack_parameters(self):
-        return np.concatenate([self.theta_i, self.theta_XY_lm, self.theta_Z_lm], axis = 0)
+        return self.params
 
     def get_pairwise_distances(self):
         distances = np.zeros((self.Lx * self.Ly, self.Lx * self.Ly))
@@ -155,7 +152,7 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
                 xi, yi = i % self.Lx, i // self.Lx
                 xj, yj = j % self.Lx, j // self.Lx
 
-
+                '''
                 distance = np.min([\
                                    np.sqrt((xi - xj) ** 2 + (yi - yj) ** 2), \
                                    np.sqrt((xi - xj + self.Lx) ** 2 + (yi - yj) ** 2), \
@@ -167,53 +164,66 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
                                    np.sqrt((xi - xj + self.Lx) ** 2 + (yi - yj + self.Ly) ** 2), \
                                    np.sqrt((xi - xj + self.Lx) ** 2 + (yi - yj - self.Ly) ** 2)
                                   ])
+                '''
+
+                distance = np.sqrt((xi - xj) ** 2 + (yi - yj) ** 2)  # OBC
                 distances[i, j] = distance
 
         assert np.allclose(distances, distances.T)
 
         return np.around(distances, decimals=4)
 
-
-    def _get_unitaries(self):
+    def _get_matrices_locs(self):
         n_qubits = self.Lx * self.Ly
-        #unitary = sp.sparse.eye(2 ** n_qubits, dtype=np.complex128).tocsc()
-        #for ti, i in zip(self.theta_i, self.theta_i_sites):
-        #    unitary = unitary.dot(get_S_gate(i, n_qubits, sz_sparse, ti))
+        matrices = []
+        locs = []
 
-        #for t_perp_lm, t_Z_lm, bond in zip(self.theta_XY_lm, self.theta_Z_lm, self.theta_Z_lm_bonds):
-        #    unitary = unitary.dot(get_SS_gate(*bond, n_qubits, sx_sparse, t_perp_lm))
-        #    unitary = unitary.dot(get_SS_gate(*bond, n_qubits, sy_sparse, t_perp_lm))
-        #    unitary = unitary.dot(get_SS_gate(*bond, n_qubits, sz_sparse, t_Z_lm))
+        #for i in range(len(self.i_sites)):
+        #    locs.append((self.i_sites[i],))
+        #    matrices.append(sx)
 
-        unitaries = []
-        for ti, i in zip(self.theta_i, self.theta_i_sites):
-            x, y = i % self.Lx, i // self.Lx 
-            matrix = scipy.linalg.expm(1.0j * (np.pi / 4. * (1 + (-1) ** (x + y)) + ti) * sx)
-            unitaries.append(ls.Operator(self.basis, [ls.Interaction(matrix, [(i,)])]))
+        for i in range(len(self.pair_bonds)):
+            matrices.append(np.kron(sx, sx) + np.kron(sy, sy))
+            matrices.append(np.kron(sz, sz))
+            locs.append(self.pair_bonds[i])
+            locs.append(self.pair_bonds[i])
 
-        for t_perp_lm, t_Z_lm, bond in zip(self.theta_XY_lm, self.theta_Z_lm, self.theta_Z_lm_bonds):
-            matrix = scipy.linalg.expm(1.0j * t_perp_lm * (np.kron(sx, sx) + np.kron(sy, sy)))
-            unitaries.append(ls.Operator(self.basis, [ls.Interaction(matrix, [(bond[0], bond[1])])]))
+        for i in range(len(self.i_sites)):
+            locs.append((self.i_sites[i],))
+            matrices.append(sz)
 
-            matrix = scipy.linalg.expm(1.0j * t_Z_lm * np.kron(sz, sz))
-            unitaries.append(ls.Operator(self.basis, [ls.Interaction(matrix, [(bond[0], bond[1])])]))
-        return unitaries
+        for i in range(len(self.pair_bonds)):
+            matrices.append(np.kron(sx, sx) + np.kron(sy, sy))
+            matrices.append(np.kron(sz, sz))
+            locs.append(self.pair_bonds[i])
+            locs.append(self.pair_bonds[i])
+
+        return matrices, locs
+
+    def _get_derivative_idx(self, param_idx):
+        return self.derivatives[param_idx]
 
 
     def _initialize_parameters(self):
-        theta_XY_lm = np.zeros(len(self.theta_XY_lm_bonds), dtype=np.float64)
-        theta_Z_lm = np.zeros(len(self.theta_Z_lm_bonds), dtype=np.float64)
-
-
-        theta_i = []
-        for x in range(self.Lx):
-            for y in range(self.Ly):
-                theta_i.append(np.pi / 2. * (-1) ** (x + y))
-
-        return np.array(theta_i), theta_XY_lm, theta_Z_lm
+        return np.random.uniform(size=len(self.locs))
 
     def set_parameters(self, parameters):
-        self.theta_i, self.theta_XY_lm, self.theta_Z_lm = self._unpack_parameters(parameters)
-        self._unitaries = self._get_unitaries()
-
+        self.params = parameters.copy()
+        self._refresh_uniraties_derivatives()
         return
+
+    def _initial_state(self):
+        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
+        spin_1 = np.zeros(self.n_qubits, dtype=np.int64)
+        spin_2 = np.zeros(self.n_qubits, dtype=np.int64)
+        for i in range(self.n_qubits):
+            x, y = i % self.Lx, i // self.Lx
+            if (x + y) % 2 == 0:
+                spin_1[i] = 1
+            else:
+                spin_2[i] = 1
+
+
+        state[utils.spin_to_index(spin_1, number_spins = self.n_qubits)] = 1. / np.sqrt(2)
+        state[utils.spin_to_index(spin_2, number_spins = self.n_qubits)] = -1. / np.sqrt(2)
+        return state

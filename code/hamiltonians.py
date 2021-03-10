@@ -29,8 +29,9 @@ class Hamiltonian(object):
 
         self._matrix = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 1, dtype=np.float64, maxiter=100000)
+        energy, ground_state = ls.diagonalize(self._matrix, k = 1, dtype=np.float64)
         print('ground state energy:', energy[0])
+        print('ground state vector:', ground_state[:, 0])
         return
 
     def __call__(self, bra):
@@ -40,7 +41,7 @@ class Hamiltonian(object):
         raise NotImplementedError()
 
 
-class HeisenbergSquareNNBipartiteSparse(Hamiltonian):
+class HeisenbergSquareNNBipartiteSparseOBC(Hamiltonian):
     def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = -1., j_zz = 1.):
         assert Lx % 2 == 0  # here we only ocnsider bipartite systems 
         assert Ly % 2 == 0
@@ -55,9 +56,11 @@ class HeisenbergSquareNNBipartiteSparse(Hamiltonian):
             site_up = ((x + 1) % Lx) + y * Lx
             site_right = x + ((y + 1) % Ly) * Lx
 
-            bonds.append((site, site_up))
-            bonds.append((site, site_right))
-        
+            if x + 1 < Lx:
+                bonds.append((site, site_up))
+            if y + 1 < Ly:
+                bonds.append((site, site_right))
+        print('bonds = ', bonds)
         return ls.Operator(self.basis, [ls.Interaction(operator, bonds)])
 
 
