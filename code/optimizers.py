@@ -67,8 +67,8 @@ class Optimizer(object):
         return
 
     def optimize(self):
-        check_gradients(_circuit_energy, args=(self.circuit, self.hamiltonian, self.config), hamiltonian = self.hamiltonian, \
-                        circuit = self.circuit, config = self.config)
+        #check_gradients(_circuit_energy, args=(self.circuit, self.hamiltonian, self.config), hamiltonian = self.hamiltonian, \
+        #                circuit = self.circuit, config = self.config)
         res = self.algorithm(_circuit_energy, self.circuit.get_parameters(), \
                              args=(self.circuit, self.hamiltonian, self.config), \
                              jac = get_all_derivatives, **self.alg_param_dict)
