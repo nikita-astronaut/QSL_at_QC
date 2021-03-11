@@ -8,7 +8,7 @@ def _circuit_energy(param, circuit, hamiltonian, config):
     assert np.isclose(state.conj().dot(state), 1.0)
     #for i in range(len(state)):
     #    print(utils.index_to_spin(np.array([i]), number_spins = 16), state[i])
-    print(np.dot(np.conj(state), hamiltonian(state)).real)
+    print(np.dot(np.conj(state), hamiltonian(state)).real, flush = True)
     #print(param)
     return np.dot(np.conj(state), hamiltonian(state)).real
 

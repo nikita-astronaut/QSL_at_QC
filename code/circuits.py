@@ -214,6 +214,10 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
             locs.append(self.pair_bonds[i])
             locs.append(self.pair_bonds[i])
 
+        for i in range(len(self.i_sites)):
+            locs.append((self.i_sites[i],))
+            matrices.append(sz)
+
         return matrices, locs
 
     def _get_derivative_idx(self, param_idx):
