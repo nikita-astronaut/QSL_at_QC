@@ -2,6 +2,32 @@ import numpy as np
 import utils
 import sys
 import config as cv_module
+import lattice_symmetries as ls
+import scipy.linalg
+
+#### TEST #####
+'''
+sx = np.array(
+               [[0, 1], \
+               [1, 0]]
+              )
+sy = np.array([[0, 1.0j], [-1.0j, 0]])
+sz = np.array([[1, 0], \
+               [0, -1]])
+
+SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
+print((SS + np.eye(4)) / 2.)
+matrix = scipy.linalg.expm(1.0j * 0.2 * SS)
+basis = ls.SpinBasis(ls.Group([]), number_spins=2, hamming_weight=None)
+basis.build()
+op = ls.Operator(basis, [ls.Interaction(matrix.conj(), [(0, 1)])])
+
+for i in range(4):
+	state = np.zeros(4, dtype=np.complex128)
+	state[i] = 1.
+	assert np.allclose(matrix.dot(state), op(state))
+exit(-1)
+'''
 
 
 config_file = utils.import_config(sys.argv[1])

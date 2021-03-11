@@ -41,7 +41,7 @@ class Hamiltonian(object):
         raise NotImplementedError()
 
 
-class HeisenbergSquareNNBipartiteSparseOBC(Hamiltonian):
+class HeisenbergSquareNNBipartiteOBC(Hamiltonian):
     def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = -1., j_zz = 1.):
         assert Lx % 2 == 0  # here we only ocnsider bipartite systems 
         assert Ly % 2 == 0
@@ -63,4 +63,23 @@ class HeisenbergSquareNNBipartiteSparseOBC(Hamiltonian):
         print('bonds = ', bonds)
         return ls.Operator(self.basis, [ls.Interaction(operator, bonds)])
 
+
+class HeisenbergSquareNNBipartitePBC(Hamiltonian):
+    def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = -1., j_zz = 1.):
+        assert Lx % 2 == 0  # here we only ocnsider bipartite systems 
+        assert Ly % 2 == 0
+
+        operator = j_pm * (np.kron(sx, sx) + np.kron(sy, sy)) + j_zz * np.kron(sz, sz)
+        n_sites = Lx * Ly
+
+        bonds = []
+        for site in range(n_sites):
+            x, y = site % Lx, site // Lx
+
+            site_up = ((x + 1) % Lx) + y * Lx
+            site_right = x + ((y + 1) % Ly) * Lx
+            bonds.append((site, site_up))
+            bonds.append((site, site_right))
+        print('bonds = ', bonds)
+        return ls.Operator(self.basis, [ls.Interaction(operator, bonds)])
 

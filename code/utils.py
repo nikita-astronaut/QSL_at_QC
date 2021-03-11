@@ -39,3 +39,30 @@ def import_config(filename: str):
     return module
 
 
+def get_x_symmetry_map(Lx, Ly):
+    states = np.arange(2 ** (Lx * Ly), dtype=np.int64)
+    spins = index_to_spin(states, number_spins = Lx * Ly)
+
+    map_site = []
+    for i in range(Lx * Ly):
+        x, y = i % Lx, i // Lx
+        j = (x + 1) % Lx + y * Lx
+        map_site.append(j)
+    map_site = np.array(map_site)
+
+    spins = spins[:, map_site]
+    return spin_to_index(spins, number_spins = Lx * Ly)
+
+def get_y_symmetry_map(Lx, Ly):
+    states = np.arange(2 ** (Lx * Ly), dtype=np.int64)
+    spins = index_to_spin(states, number_spins = Lx * Ly)
+
+    map_site = []
+    for i in range(Lx * Ly):
+        x, y = i % Lx, i // Lx
+        j = x + ((y + 1) % Ly) * Lx
+        map_site.append(j)
+    map_site = np.array(map_site)
+
+    spins = spins[:, map_site]
+    return spin_to_index(spins, number_spins = Lx * Ly)
