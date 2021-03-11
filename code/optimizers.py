@@ -8,7 +8,7 @@ def _circuit_energy(param, circuit, hamiltonian, config):
     assert np.isclose(state.conj().dot(state), 1.0)
     #for i in range(len(state)):
     #    print(utils.index_to_spin(np.array([i]), number_spins = 16), state[i])
-    print(np.dot(np.conj(state), hamiltonian(state)).real)
+    print(np.dot(np.conj(state), hamiltonian(state)).real, flush = True)
     #print(param)
     return np.dot(np.conj(state), hamiltonian(state)).real
 
@@ -67,8 +67,8 @@ class Optimizer(object):
         return
 
     def optimize(self):
-        check_gradients(_circuit_energy, args=(self.circuit, self.hamiltonian, self.config), hamiltonian = self.hamiltonian, \
-                        circuit = self.circuit, config = self.config)
+        #check_gradients(_circuit_energy, args=(self.circuit, self.hamiltonian, self.config), hamiltonian = self.hamiltonian, \
+        #                circuit = self.circuit, config = self.config)
         res = self.algorithm(_circuit_energy, self.circuit.get_parameters(), \
                              args=(self.circuit, self.hamiltonian, self.config), \
                              jac = get_all_derivatives, **self.alg_param_dict)
