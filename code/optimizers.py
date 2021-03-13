@@ -5,10 +5,12 @@ import utils
 def _circuit_energy(param, circuit, hamiltonian, config):
     circuit.set_parameters(param)
     state = circuit()
+    # print('norm', state.conj().dot(state))
     assert np.isclose(state.conj().dot(state), 1.0)
+    
     #for i in range(len(state)):
     #    print(utils.index_to_spin(np.array([i]), number_spins = 16), state[i])
-    print(np.dot(np.conj(state), hamiltonian(state)).real, flush = True)
+    # print(np.dot(np.conj(state), hamiltonian(state)).real, flush = True)
     #print(param)
     return np.dot(np.conj(state), hamiltonian(state)).real
 
@@ -21,7 +23,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
 
         grads = np.array([2 * np.dot(state.conj(), hamiltonian(circuit.derivative(i))).real \
                           for i in range(len(cur_params))])
-        new_params = cur_params - lr * grads
+        new_params = (cur_params - lr * grads).real
 
         circuit.set_parameters(new_params)
 
@@ -33,8 +35,50 @@ def natural_gradiend_descend(energy_val, init_values, args, n_iter = 100, lr = 0
     circuit, hamiltonian, config = args
     for n_iter in range(n_iter):
         cur_params = circuit.get_parameters()
-        grads = circuit.get_natural_gradients(hamiltonian)
-        new_params = cur_params - lr * grads
+        grads, ij, der_one = circuit.get_natural_gradients(hamiltonian)
+        '''
+        for i in range(len(grads)):
+            state_i = circuit()
+            new_params = cur_params.copy()
+            new_params[i] += 1e-9
+            circuit.set_parameters(new_params)
+            state_f = circuit()
+            der = np.dot(state_i.conj(), state_f - state_i) / 1e-9
+
+            print(der_one[i], der)
+            assert np.isclose(der_one[i], der)
+            circuit.set_parameters(cur_params)
+
+        for i in range(len(grads)):
+            for k in range(len(grads)):
+                state_0 = circuit()
+                new_params = cur_params.copy()
+
+                new_params[i] += 1e-5   
+                circuit.set_parameters(new_params)
+                state_i = circuit()
+
+                new_params[i] -= 1e-5  
+                new_params[k] += 1e-5  
+                circuit.set_parameters(new_params)
+                state_k = circuit()
+                circuit.set_parameters(cur_params)
+
+                der = np.dot((state_i - state_0).conj(), state_k - state_0) / 1e-5 / 1e-5
+                print(ij[i, k], der, i, k)
+                assert np.abs((ij[i, k] - der) / der)  < 1e-4
+
+            #print(j[i], der)
+            #assert np.isclose(j[i], der)
+            #circuit.set_parameters(cur_params)
+        '''
+
+        #circuit.set_parameters(cur_params)
+        MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
+        grads = np.linalg.inv(MT).dot(grads)
+
+
+        new_params = (cur_params - lr * grads).real
 
         circuit.set_parameters(new_params)
 
