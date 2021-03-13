@@ -444,7 +444,7 @@ class SU2_PBC_symmetrized(Circuit):
         assert len(np.unique(b)) == self.Lx * self.Ly
 
 
-
+        
         ### diagonal_upup ###
         layer = []
         for i in range(self.Lx * self.Ly):
@@ -499,7 +499,7 @@ class SU2_PBC_symmetrized(Circuit):
         layers.append(deepcopy(layer))
         b = np.array([i for sub in layer for i in sub])
         assert len(np.unique(b)) == self.Lx * self.Ly
-
+        
 
 
         return layers

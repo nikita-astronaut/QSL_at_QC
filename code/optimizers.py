@@ -29,7 +29,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(energy_val, init_values, args, n_iter = 100, lr = 0.01):
+def natural_gradiend_descend(energy_val, init_values, args, n_iter = 10000, lr = 0.03):
     circuit, hamiltonian, config = args
     for n_iter in range(n_iter):
         cur_params = circuit.get_parameters()
