@@ -30,8 +30,6 @@ class Circuit(object):
         state = self._initial_state()
         for gate in self.unitaries:
             state = gate(state)
-
-
         assert np.isclose(np.dot(state, self.total_spin(state)) + 3 * self.Lx * self.Ly, 0.0)
         assert np.isclose(np.dot(state, state), 1.0)
         return state
@@ -57,8 +55,9 @@ class Circuit(object):
 
     def get_natural_gradients(self, hamiltonian):
         grads = self.get_all_derivatives(hamiltonian)
-        G = self.get_metric_tensor()
-        return np.linalg.inv(G).dot(grads)
+        ij, j = self.get_metric_tensor()
+        G = ij - np.einsum('i,j->ij', j.conj(), j)
+        return grads, ij, j
 
     def _get_derivative_idx(self, param_idx):
         return self.derivatives[param_idx]
@@ -227,9 +226,11 @@ class SU2_PBC_symmetrized(Circuit):
 
     def __call__(self):
         state = self._initial_state()
+        # assert np.isclose(np.dot(state.conj(), state), 1.0)
         for layer in self.unitaries:
             for gate in layer:
                 state = gate(state)
+                # assert np.isclose(np.dot(state.conj(), state), 1.0)
 
         return state
 
@@ -264,13 +265,15 @@ class SU2_PBC_symmetrized(Circuit):
     def get_metric_tensor(self):
         MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
 
-        for i in range(len(self.params)):
-            LEFT = self.__call__()
+        left_beforeder = self._initial_state()
 
-            for layer in self.unitaries[:i]:
-                for u in layer:
-                    LEFT = u(LEFT)  # L_i ... L_0 |0>
+        for i in range(len(self.params)):
+            if i > 0:
+                for layer in self.unitaries[i - 1:i]:
+                    for u in layer:
+                        left_beforeder = u(left_beforeder)  # L_i ... L_0 |0>
             
+            LEFT = left_beforeder.copy()
             derivative = LEFT * 0.0
             for der in self.derivatives[i]:
                 derivative += der(LEFT)
@@ -284,7 +287,7 @@ class SU2_PBC_symmetrized(Circuit):
                 for u_herm in reversed(layer):
                     LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
 
-            RIGHT = self.__call__()  # RIGHT = |0>
+            RIGHT = self._initial_state()  # RIGHT = |0>
             for j in range(len(self.params)):
                 derivative = RIGHT * 0.
                 for der in self.derivatives[j]:
@@ -298,19 +301,15 @@ class SU2_PBC_symmetrized(Circuit):
 
 
         der_i = np.zeros(len(self.params), dtype=np.complex128)
-        LEFT = self.__call__()
-
-        for layer in self.unitaries:
-            for u in layer:
-                LEFT = u(LEFT)  # L_{N-1} ... L_0 |0>
+        LEFT = self.__call__() # L_{N-1} ... L_0 |0>
 
         for layer in reversed(self.unitaries_herm):
             for u_herm in reversed(layer):
-                LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
 
-        RIGHT = self.__call__()  # RIGHT = |0>
+        RIGHT = self._initial_state()   # RIGHT = |0>
         for i in range(len(self.params)):
-            derivative = RIGHT * 0.
+            derivative = RIGHT * 0. + 0.0j
             for der in self.derivatives[i]:
                 derivative += der(RIGHT)
 
@@ -320,9 +319,9 @@ class SU2_PBC_symmetrized(Circuit):
                 RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} L_{N - 1} ... L_0 |0>
                 LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
 
-        MT -= np.einsum('i,j->ij', der_i.conj(), der_i)
+        # MT -= np.einsum('i,j->ij', der_i.conj(), der_i)
 
-        return MT.real
+        return MT, der_i
 
     def _initial_state(self):
         if self.ini_state is not None:
