@@ -5,7 +5,7 @@ import utils
 def _circuit_energy(param, circuit, hamiltonian, config):
     circuit.set_parameters(param)
     state = circuit()
-    # print('norm', state.conj().dot(state))
+    # print('norm', state.conj().dot(state)) # ne norm
     assert np.isclose(state.conj().dot(state), 1.0)
     
     #for i in range(len(state)):
