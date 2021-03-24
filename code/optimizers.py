@@ -5,12 +5,12 @@ import utils
 def _circuit_energy(param, circuit, hamiltonian, config):
     circuit.set_parameters(param)
     state = circuit()
-    # print('norm', state.conj().dot(state)) # ne norm
+    #print('norm', state.conj().dot(state))
     assert np.isclose(state.conj().dot(state), 1.0)
     
     #for i in range(len(state)):
     #    print(utils.index_to_spin(np.array([i]), number_spins = 16), state[i])
-    # print(np.dot(np.conj(state), hamiltonian(state)).real, flush = True)
+    print(np.dot(np.conj(state), hamiltonian(state)).real, flush = True)
     #print(param)
     return np.dot(np.conj(state), hamiltonian(state)).real
 
@@ -31,54 +31,61 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(energy_val, init_values, args, n_iter = 100, lr = 0.01):
+def natural_gradiend_descend(energy_val, init_values, args, n_iter = 10000, lr = 0.01, test = False):
     circuit, hamiltonian, config = args
     for n_iter in range(n_iter):
         cur_params = circuit.get_parameters()
         grads, ij, der_one = circuit.get_natural_gradients(hamiltonian)
-        '''
-        for i in range(len(grads)):
-            state_i = circuit()
-            new_params = cur_params.copy()
-            new_params[i] += 1e-9
-            circuit.set_parameters(new_params)
-            state_f = circuit()
-            der = np.dot(state_i.conj(), state_f - state_i) / 1e-9
-
-            print(der_one[i], der)
-            assert np.isclose(der_one[i], der)
-            circuit.set_parameters(cur_params)
-
-        for i in range(len(grads)):
-            for k in range(len(grads)):
-                state_0 = circuit()
-                new_params = cur_params.copy()
-
-                new_params[i] += 1e-5   
-                circuit.set_parameters(new_params)
+                
+        if test:
+            for i in range(len(grads)):
                 state_i = circuit()
-
-                new_params[i] -= 1e-5  
-                new_params[k] += 1e-5  
+                new_params = cur_params.copy()
+                new_params[i] += 1e-9
                 circuit.set_parameters(new_params)
-                state_k = circuit()
+                state_f = circuit()
+                der = np.dot(state_i.conj(), state_f - state_i) / 1e-9
+
+                print(der_one[i], der, i)
+                # assert np.isclose(der_one[i], der)
                 circuit.set_parameters(cur_params)
 
-                der = np.dot((state_i - state_0).conj(), state_k - state_0) / 1e-5 / 1e-5
-                print(ij[i, k], der, i, k)
-                assert np.abs((ij[i, k] - der) / der)  < 1e-4
+            for i in range(len(grads)):
+                for k in range(len(grads)):
+                    state_0 = circuit()
+                    new_params = cur_params.copy()
+
+                    new_params[i] += 1e-6
+                    circuit.set_parameters(new_params)
+                    state_i = circuit()
+
+                    new_params[i] -= 1e-6  
+                    new_params[k] += 1e-6  
+                    circuit.set_parameters(new_params)
+                    state_k = circuit()
+                    circuit.set_parameters(cur_params)
+
+                    der = np.dot((state_i - state_0).conj(), state_k - state_0) / 1e-6 / 1e-6
+                    print(ij[i, k], der, i, k)
+                    assert np.abs((ij[i, k] - der)) < 1e-3
 
             #print(j[i], der)
             #assert np.isclose(j[i], der)
             #circuit.set_parameters(cur_params)
-        '''
+        
 
         #circuit.set_parameters(cur_params)
         MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
-        grads = np.linalg.inv(MT).dot(grads)
+        grads = np.linalg.inv(MT + 1e-8 * np.eye(MT.shape[0])).dot(grads)
+        #if np.sum(np.abs(grads)) / len(grads) > 3:
+        #    print('flipped')
+        #    grads = 3 * grads / np.sqrt(np.sum(grads ** 2))
 
 
         new_params = (cur_params - lr * grads).real
+        
+        print('forces =', grads)
+        print('current parameters =', new_params)
 
         circuit.set_parameters(new_params)
 
@@ -106,7 +113,7 @@ def check_gradients(energy_val, args, circuit = None, \
         energy_f = _circuit_energy(new_params, *args)
 
         print(i, (energy_f - energy_i) / 1e-7, grads[i])
-        assert np.abs((energy_f - energy_i) / 1e-7 - grads[i]) < 1e-5
+        assert np.abs((energy_f - energy_i) / 1e-7 - grads[i]) < 1e-3
 
     return circuit
 
@@ -126,12 +133,12 @@ class Optimizer(object):
     def optimize(self):
         #check_gradients(_circuit_energy, args=(self.circuit, self.hamiltonian, self.config), hamiltonian = self.hamiltonian, \
         #                circuit = self.circuit, config = self.config)
-        #res = self.algorithm(_circuit_energy, self.circuit.get_parameters(), \
-        #                     args=(self.circuit, self.hamiltonian, self.config), \
-        #                     jac = get_all_derivatives, **self.alg_param_dict)
-
         res = self.algorithm(_circuit_energy, self.circuit.get_parameters(), \
                              args=(self.circuit, self.hamiltonian, self.config), \
-                             **self.alg_param_dict)
+                             jac = get_all_derivatives, **self.alg_param_dict)
+
+        #res = self.algorithm(_circuit_energy, self.circuit.get_parameters(), \
+        #                     args=(self.circuit, self.hamiltonian, self.config), \
+        #                     **self.alg_param_dict)
 
         return res.x
