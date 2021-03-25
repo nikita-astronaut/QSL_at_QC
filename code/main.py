@@ -40,6 +40,7 @@ H = opt_config.hamiltonian(**opt_config.ham_params_dict)
 
 circuit = opt_config.circuit(**opt_config.circuit_params_dict)
 
-opt = opt_config.optimizer(H, circuit, opt_config.algorithm, opt_config, opt_config.opt_params_dict)
+projector = opt_config.projector(**opt_config.proj_params_dict)
+opt = opt_config.optimizer(H, circuit, projector, opt_config.algorithm, opt_config, opt_config.opt_params_dict)
 
 print(opt.optimize())

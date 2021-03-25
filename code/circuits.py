@@ -244,12 +244,22 @@ class SU2_PBC_symmetrized(Circuit):
         return state
 
 
-    def get_all_derivatives(self, hamiltonian):
-        LEFT = hamiltonian(self.__call__())
+    def get_all_derivatives(self, hamiltonian, projector):
+        state = self.__call__()
+        state_proj = projector(state)
+        norm = np.dot(state.conj(), state_proj)
+
+        energy = np.dot(np.conj(state), hamiltonian(state_proj) / norm)
+
+        LEFT = hamiltonian(state_proj)
+        LEFT_conn = state_proj.copy()  # total projector is Hermitean
+
         for layer in reversed(self.unitaries_herm):
             for u_herm in reversed(layer):
                 LEFT = u_herm(LEFT)
+                LEFT_conn = u_herm(LEFT_conn)
         LEFT = LEFT.conj()
+        LEFT_conn = LEFT_conn.conj()
 
         RIGHT = self._initial_state()
 
@@ -259,16 +269,22 @@ class SU2_PBC_symmetrized(Circuit):
             derivative = RIGHT * 0.0
             for der in self.derivatives[idx]:
                 derivative += der(RIGHT)
-            grads.append(np.dot(LEFT, derivative))
+
+            grad = np.dot(LEFT, derivative) / norm
+            grad -= np.dot(LEFT_conn, derivative) / norm * energy
+            grads.append(2 * grad.real)
 
 
             LEFT = LEFT.conj()
+            LEFT_conn = LEFT_conn.conj()
             for u in self.unitaries[idx]:
                 RIGHT = u(RIGHT)
                 LEFT = u(LEFT)
+                LEFT_conn = u(LEFT_conn)
             LEFT = LEFT.conj()
+            LEFT_conn = LEFT_conn.conj()
 
-        return 2 * np.array(grads).real
+        return np.array(grads)
 
 
     def get_metric_tensor(self):
@@ -344,7 +360,7 @@ class SU2_PBC_symmetrized(Circuit):
         spin_2 = np.zeros(self.n_qubits, dtype=np.int64)
         for i in range(self.n_qubits):
             x, y = i % self.Lx, i // self.Lx
-            if x % 2 == 0: ##(x + y) % 2 == 0:
+            if (x + y) % 2 == 0:
                 spin_1[i] = 1
             else:
                 spin_2[i] = 1
@@ -489,7 +505,7 @@ class SU2_PBC_symmetrized(Circuit):
             layers.append(deepcopy(layer))
 
 
-         
+            '''
 
             layer = []
             for i in range(self.Lx * self.Ly):
@@ -531,12 +547,12 @@ class SU2_PBC_symmetrized(Circuit):
                 layer.append(((i, i_to), P_ij))
             layers.append(deepcopy(layer))
 
-
+            '''
 
             layer = []
             for i in range(self.Lx * self.Ly):
                 x, y = i // self.Lx, i % self.Lx
-                layer.append(((i,), (-1) ** (x) * sz))
+                layer.append(((i,), (-1) ** (x + y) * sz))
             layers.append(layer)
         
 
