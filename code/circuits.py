@@ -30,6 +30,11 @@ class Circuit(object):
         self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
         self.basis_bare.build()
 
+        self.force_exact = None
+        self.force = None
+        self.force_SR_exact = None
+        self.force_SR = None
+
     def __call__(self):
         state = self._initial_state()
         for gate in self.unitaries:
@@ -291,7 +296,7 @@ class SU2_PBC_symmetrized(Circuit):
         #    print((derivatives_sampling[i] / norm_sampling).real * 2., (numerators[i] / norm).real * 2., '|', \
         #           (self.connectivity_sampling[i] * energy_sampling / norm_sampling).real * 2., (numerators_conn[i] / norm * energy).real * 2.)
         #    print(grad_sampling[i], np.array(grads)[i])
-        print('energy sampling:', energy_sampling / norm_sampling - 33, 'energy exact', energy - 33)
+        #print('energy sampling:', energy_sampling / norm_sampling - 33, 'energy exact', energy - 33)
         #exit(-1)
 
 

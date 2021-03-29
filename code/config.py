@@ -9,6 +9,7 @@ import utils
 
 class opt_parameters:
     def __init__(self):
+        self.path_to_logs = '/home/astronaut/QSL_at_QC/logs/'
         self.Lx, self.Ly = 4, 4
         su2 = True
 
@@ -49,7 +50,12 @@ class opt_parameters:
         self.opt_params_dict = {}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
 
 
+
+
+
         #### stochastic parameters ####
         self.N_samples = 2 ** 13
+        self.SR_eig_cut = 1e-2
+        self.SR_diag_reg = 1e-2
 
         return
