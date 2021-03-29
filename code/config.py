@@ -7,6 +7,7 @@ from scipy.optimize import differential_evolution, minimize
 import projector
 import utils
 import lattice_symmetries as ls
+import sys
 
 class opt_parameters:
     def __init__(self):
@@ -14,7 +15,7 @@ class opt_parameters:
         self.Lx, self.Ly = 4, 4
         self.su2 = True
         self.BC = 'OBC'
-        self.spin = 2
+        self.spin = 0
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
 
@@ -24,7 +25,7 @@ class opt_parameters:
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
                                 'j_pm' : +1., 'j_zz' : 1., \
-                                'j2': 0.5,
+                                'j2': 0.5, \
                                 'BC' : self.BC}
 
         self.circuit = circuits.SU2_OBC_symmetrized

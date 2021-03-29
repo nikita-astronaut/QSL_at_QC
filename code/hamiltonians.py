@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 from scipy import sparse
 import lattice_symmetries as ls
+import utils
 
 sz = np.array([[1, 0], \
                [0, -1]])
@@ -26,9 +27,16 @@ P_ij = (SS + np.eye(4)) / 2.
 class Hamiltonian(object):
     def __init__(self, basis, n_qubits, su2, **kwargs):
         self.n_qubits = n_qubits
-        #self.basis = basis
-
-
+        self.basis = basis
+        '''
+        spin = 2
+        Lx, Ly = 4, 4
+        self.basis = ls.SpinBasis(ls.Group([\
+            ls.Symmetry(utils.get_x_symmetry_map(Lx, Ly, basis=basis, su2=su2)[0], sector=0),
+            ls.Symmetry(utils.get_y_symmetry_map(Lx, Ly, basis=basis, su2=su2)[0], sector=0)
+        ]), number_spins=n_qubits, hamming_weight=n_qubits // 2 + spin if su2 else None)
+        self.basis.build()
+        '''
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
         energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.float64)
@@ -36,7 +44,7 @@ class Hamiltonian(object):
         self.nterms = len(self._terms)
         print('ground state energy:', energy[0] - self.energy_renorm)
         print('system gap =', energy[1] - energy[0])
-        exit(-1)
+        #exit(-1)
         return
 
     def __call__(self, bra, n_term = None):
