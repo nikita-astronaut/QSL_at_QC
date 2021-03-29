@@ -44,6 +44,7 @@ class Hamiltonian(object):
         self.nterms = len(self._terms)
         print('ground state energy:', energy[0] - self.energy_renorm)
         print('system gap =', energy[1] - energy[0])
+        self.gse = energy[0]
         #exit(-1)
         return
 

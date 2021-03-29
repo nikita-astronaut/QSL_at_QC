@@ -82,7 +82,7 @@ class Observables(object):
 
 
         ### prepare main log ###
-        string = 'energy fidelity '
+        string = 'gsenergy energy fidelity '
         for _, name in self.observables:
             string += name + ' '
         self.main_log.write(string + '\n')
@@ -147,5 +147,5 @@ class Observables(object):
         assert np.isclose(dimer_avg.imag, 0.0)
         obs_vals[-1] -= (dimer_avg ** 2).real
 
-        self.main_log.write(('{:.7f} {:.7f} ' + '{:.7f} ' * len(obs_vals) + '\n').format(energy, fidelity, *obs_vals))
+        self.main_log.write(('{:.7f} {:.7f} {:.7f} ' + '{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, *obs_vals))
         self.main_log.flush()

@@ -777,7 +777,7 @@ class SU2_OBC_symmetrized(SU2_PBC_symmetrized):
                     layers.append(deepcopy(layer))
 
 
-            '''
+            
 
             for i in range(self.Lx * self.Ly):
                 layer = []
@@ -823,7 +823,7 @@ class SU2_OBC_symmetrized(SU2_PBC_symmetrized):
                     layer.append(((i, i_to), P_ij))
                     layers.append(deepcopy(layer))
 
-            '''
+            
 
         return layers
 
