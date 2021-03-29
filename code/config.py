@@ -32,42 +32,42 @@ class opt_parameters:
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
 
+
+        ### setting up symmetries ###
+        self.symmetries = [
+            utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+        ]
+        self.eigenvalues = [-1, -1]
+        self.sectors = [2, 2]  # in Toms notation
+        self.degrees = [4, 4]
+
+
         self.hamiltonian = hamiltonians.HeisenbergSquare;
         self.ham_params_dict = {'n_qubits' : self.Lx * self.Ly, \
                                 'su2' : self.su2, \
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
                                 'j_pm' : +1., 'j_zz' : 1., \
-                                'j2': 0.0,\
-                                #0.1 * rank, \
-                                'BC' : self.BC}
+                                'j2': 0.0, \
+                                'BC' : self.BC, \
+                                'symmetries' : [s[0] for s in self.symmetries], \
+                                'sectors' : self.sectors, \
+                                'spin' : self.spin
+                                }
 
         self.circuit = circuits.SU2_OBC_symmetrized if self.BC == 'OBC' else circuits.SU2_PBC_symmetrized
         self.circuit_params_dict = {'Lx' : self.Lx, 'Ly' : self.Ly, 'spin' : self.spin, 'basis' : self.basis}
         
 
         self.projector = projector.ProjectorFull
-        '''
-        self.proj_params_dict = {'n_qubits' : self.Lx * self.Ly, \
-                                 'su2' : True, \
-                                 'generators' : [utils.get_x_symmetry_map(self.Lx, self.Ly, su2=su2),\
-                                                 utils.get_y_symmetry_map(self.Lx, self.Ly, su2=su2), \
-                                                 utils.get_rot_symmetry_map(self.Lx, self.Ly, su2=su2), \
-                                                 utils.get_Cx_symmetry_map(self.Lx, self.Ly, su2=su2)] ,\
-                                 'eigenvalues' : [1, 1, 1, 1], \
-                                 'degrees' : [self.Lx, self.Ly, 4, 2]}
-        '''
 
         self.proj_params_dict = {'n_qubits' : self.Lx * self.Ly, \
                                  'su2' : self.su2, \
                                  'basis' : self.basis, \
-                                 'generators' : [#utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-                                                 #utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-                                                 utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-                                                 utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-                                                ] ,\
-                                 'eigenvalues' : [-1, -1], \
-                                 'degrees' : [4, 4]}
+                                 'generators' : self.symmetries, \
+                                 'eigenvalues' : self.eigenvalues, \
+                                 'degrees' : self.degrees}
 
         self.observables = [observables.neel_order(self.Lx, self.Ly, self.basis, self.su2), \
                             observables.stripe_order(self.Lx, self.Ly, self.basis, self.su2), \

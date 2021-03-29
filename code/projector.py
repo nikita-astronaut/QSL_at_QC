@@ -6,7 +6,7 @@ from copy import deepcopy
 class Projector(object):
     def __call__(self, state, n_term = None):
         if n_term is not None:
-            return state[self.permutations[n_term]]
+            return state[self.permutations[n_term]] * self.characters[n_term]
 
         state_projected = state * 0.0
         for permutation, character in zip(self.permutations, self.characters):
@@ -22,7 +22,6 @@ class ProjectorFull(Projector):
 
         self.maps, self.permutations, self.characters = self._init_projector(generators, eigenvalues, degrees)
         self.nterms = len(self.permutations)
-
 
         return
 

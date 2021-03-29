@@ -504,8 +504,9 @@ class SU2_PBC_symmetrized(Circuit):
         singletizer = singletizer + singletizer.T
 
         tripletizer = np.zeros((4, 4), dtype=np.complex128)
-        tripletizer[1, 0] = +1. / np.sqrt(2)
-        tripletizer[2, 0] = +1. / np.sqrt(2)
+        #tripletizer[1, 0] = +1. / np.sqrt(2)
+        #tripletizer[2, 0] = +1. / np.sqrt(2)
+        tripletizer[3, 0] = 1.
         tripletizer = tripletizer + tripletizer.T
 
         octupletizer = np.zeros((16, 16), dtype=np.complex128)
@@ -546,9 +547,9 @@ class SU2_PBC_symmetrized(Circuit):
             x = self.basis.states[i]
             _, _, norm = self.basis.state_info(x)
             state_su2[i] = state[self.basis_bare.index(x)] / norm
-            print(state[self.basis_bare.index(x)] / norm)
+            #print(state[self.basis_bare.index(x)] / norm)
 
-        print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
+        #print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
         assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
 
         if self.spin == 0.0:

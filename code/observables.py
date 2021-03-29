@@ -135,6 +135,10 @@ class Observables(object):
         state_proj = state_proj / np.sqrt(norm)
         assert np.isclose(np.dot(state_proj, state_proj.conj()), 1.0)
         fidelity = np.abs(np.dot(self.hamiltonian.ground_state[0].conj(), state_proj)) ** 2
+        #for i, j in zip(self.hamiltonian.ground_state[0], state_proj):
+        #    print(i, j)
+        #print(fidelity)
+
 
         obs_vals = []
         for operator, _ in self.observables:
