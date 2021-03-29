@@ -504,8 +504,9 @@ class SU2_PBC_symmetrized(Circuit):
         singletizer = singletizer + singletizer.T
 
         tripletizer = np.zeros((4, 4), dtype=np.complex128)
-        tripletizer[1, 0] = +1. / np.sqrt(2)
-        tripletizer[2, 0] = +1. / np.sqrt(2)
+        #tripletizer[1, 0] = +1. / np.sqrt(2)
+        #tripletizer[2, 0] = +1. / np.sqrt(2)
+        tripletizer[3, 0] = 1.
         tripletizer = tripletizer + tripletizer.T
 
         octupletizer = np.zeros((16, 16), dtype=np.complex128)
