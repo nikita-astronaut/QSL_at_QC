@@ -129,9 +129,9 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
             MT_inv += (1. / s[lambda_idx]) * \
                     np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
 
-        circuit.force = grads.copy()
+        circuit.forces = grads.copy()
         grads = MT_inv.dot(grads)
-        circuit.force_SR = grads.copy()
+        circuit.forces_SR = grads.copy()
 
         MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
         MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
@@ -151,9 +151,9 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
                       np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
 
 
-        circuit.force_exact = grads_exact.copy()
+        circuit.forces_exact = grads_exact.copy()
         grads_exact = MTe_inv.dot(grads_exact)
-        circuit.force_SR_exact = grads_exact.copy()
+        circuit.forces_SR_exact = grads_exact.copy()
         #if np.sum(np.abs(grads)) / len(grads) > 3:
         #    print('flipped')
         #    grads = 3 * grads / np.sqrt(np.sum(grads ** 2))

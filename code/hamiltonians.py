@@ -22,22 +22,21 @@ s0_sparse = sp.sparse.csr_matrix(s0)
 
 SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 P_ij = (SS + np.eye(4)) / 2.
-print(P_ij)
 
 class Hamiltonian(object):
-    def __init__(self, n_qubits, su2, **kwargs):
+    def __init__(self, basis, n_qubits, su2, **kwargs):
         self.n_qubits = n_qubits
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=n_qubits // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-        self.basis.build()
+        #self.basis = basis
+
 
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
         energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.float64)
         self.ground_state = ground_state.T
         self.nterms = len(self._terms)
-        print('ground state energy:', energy[0])
+        print('ground state energy:', energy[0] - self.energy_renorm)
         print('system gap =', energy[1] - energy[0])
-        print('ground state vector:', ground_state[:, 0])
+        exit(-1)
         return
 
     def __call__(self, bra, n_term = None):
@@ -121,7 +120,7 @@ class HeisenbergSquare(Hamiltonian):
             if (x + 1 < Lx and y - 1 >= 0) or BC == 'PBC':
                 bonds_j2.append((site, site_right))
 
-        self.energy_renorm = len(bonds) + len(bonds_j2) * j2.
+        self.energy_renorm = len(bonds) + len(bonds_j2) * j2
         return ls.Operator(self.basis, [ls.Interaction(operator * 2, bonds), ls.Interaction(j2 * operator_j2 * 2, bonds_j2)]),\
                [[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 2] for bond in bonds] + \
                [[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2], \

@@ -16,10 +16,8 @@ sy = np.array([[0, 1.0j], [-1.0j, 0]])
 
 SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 
-def neel_order(Lx, Ly, su2=False):
+def neel_order(Lx, Ly, basis, su2=False):
     n_qubits = Lx * Ly
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)
-    basis.build()
 
     site_plus = []
     site_minus = []
@@ -32,10 +30,8 @@ def neel_order(Lx, Ly, su2=False):
 
     return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel'
 
-def stripe_order(Lx, Ly, su2=False):
+def stripe_order(Lx, Ly, basis, su2=False):
     n_qubits = Lx * Ly
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)
-    basis.build()
 
     site_plus = []
     site_minus = []
@@ -49,11 +45,8 @@ def stripe_order(Lx, Ly, su2=False):
     return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Stripe'
 
 
-def dimer_order(Lx, Ly, su2=False, BC='PBC'):
+def dimer_order(Lx, Ly, basis, su2=False, BC='PBC'):
     n_qubits = Lx * Ly
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)
-    basis.build()
-
     
 
     bond_plus = []
@@ -62,10 +55,10 @@ def dimer_order(Lx, Ly, su2=False, BC='PBC'):
         for y in range(Ly):
             if x % 2 == 0:
                 if x < Lx - 1 or BC == 'PBC':
-                    bond_plus.append((x + y * Lx), (((x + 1) % Lx) + y * Lx))
+                    bond_plus.append(((x + y * Lx), (((x + 1) % Lx) + y * Lx)))
             else:
                 if x < Lx - 1 or BC == 'PBC':
-                    bond_minus.append((x + y * Lx), (((x + 1) % Lx) + y * Lx))
+                    bond_minus.append(((x + y * Lx), (((x + 1) % Lx) + y * Lx)))
 
     return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Dimer'
 
@@ -74,16 +67,17 @@ class Observables(object):
     def __init__(self, config, hamiltonian, circuit, projector):
         self.path_to_logs = config.path_to_logs
 
-        self.main_log = open(os.path.join(self.path_to_logs, '/main_log.dat'), 'w')
-        self.force_log = open(os.path.join(self.path_to_logs, '/force_log.dat'), 'w')
-        self.exact_force_log = open(os.path.join(self.path_to_logs, '/exact_force_log.dat'), 'w')
-        self.force_SR_log = open(os.path.join(self.path_to_logs, '/force_SR_log.dat'), 'w')
-        self.exact_force_SR_log = open(os.path.join(self.path_to_logs, '/exact_force_SR_log.dat'), 'w')
+        self.main_log = open(os.path.join(self.path_to_logs, 'main_log.dat'), 'w')
+        self.force_log = open(os.path.join(self.path_to_logs, 'force_log.dat'), 'w')
+        self.exact_force_log = open(os.path.join(self.path_to_logs, 'exact_force_log.dat'), 'w')
+        self.force_SR_log = open(os.path.join(self.path_to_logs, 'force_SR_log.dat'), 'w')
+        self.exact_force_SR_log = open(os.path.join(self.path_to_logs, 'exact_force_SR_log.dat'), 'w')
 
-        self.parameters_log = open(os.path.join(self.path_to_logs, '/parameters_log.dat'), 'w')
+        self.parameters_log = open(os.path.join(self.path_to_logs, 'parameters_log.dat'), 'w')
 
         self.observables = config.observables
         self.hamiltonian = hamiltonian
+        self.projector = projector
         self.circuit = circuit
 
 
@@ -123,7 +117,7 @@ class Observables(object):
         self.force_SR_log.flush()
 
 
-        parameters = self.circuit.cur_params
+        parameters = self.circuit.params
         for p in parameters:
             self.parameters_log.write('{:.4f}, '.format(p))
         self.parameters_log.write('\n')
@@ -138,15 +132,20 @@ class Observables(object):
         
 
         ### compute fidelity ###
-        state_proj = state_proj / norm
+        state_proj = state_proj / np.sqrt(norm)
         assert np.isclose(np.dot(state_proj, state_proj.conj()), 1.0)
-        fidelity = np.abs(np.dot(hamiltonian.ground_state[0].conj(), state_proj)) ** 2
+        fidelity = np.abs(np.dot(self.hamiltonian.ground_state[0].conj(), state_proj)) ** 2
 
         obs_vals = []
         for operator, _ in self.observables:
-            val = np.dot(state_proj.conj(), operator(state_proj))
-            obs_vals.append(val)
-
+            val = np.dot(state_proj.conj(), operator(operator(state_proj)))
+            assert np.isclose(val.imag, 0.0)
+            obs_vals.append(val.real)
+        
+        #### dimer amendment ###
+        dimer_avg = np.dot(state_proj.conj(), self.observables[-1][0](state_proj))
+        assert np.isclose(dimer_avg.imag, 0.0)
+        obs_vals[-1] -= (dimer_avg ** 2).real
 
         self.main_log.write(('{:.7f} {:.7f} ' + '{:.7f} ' * len(obs_vals) + '\n').format(energy, fidelity, *obs_vals))
         self.main_log.flush()

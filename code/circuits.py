@@ -22,18 +22,17 @@ s0 = np.eye(2)
 SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 
 class Circuit(object):
-    def __init__(self, n_qubits, **kwargs):
+    def __init__(self, n_qubits, basis, **kwargs):
+        self.basis = basis
         self.n_qubits = n_qubits
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=self.n_qubits // 2)#, spin_inversion=-1)
-        self.basis.build()
 
         self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
         self.basis_bare.build()
 
-        self.force_exact = None
-        self.force = None
-        self.force_SR_exact = None
-        self.force_SR = None
+        self.forces_exact = None
+        self.forces = None
+        self.forces_SR_exact = None
+        self.forces_SR = None
 
     def __call__(self):
         state = self._initial_state()
@@ -194,16 +193,28 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
 
 
 class SU2_PBC_symmetrized(Circuit):
-    def __init__(self, Lx, Ly):
+    def __init__(self, Lx, Ly, basis, spin=0):
         self.Lx = Lx
         self.Ly = Ly
-        super().__init__(Lx * Ly)
-        self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
-        self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
-        self.Cx = utils.get_Cx_symmetry_map(self.Lx, self.Ly)
-        self.Cy = utils.get_Cy_symmetry_map(self.Lx, self.Ly)
+        self.n_qubits = Lx * Ly
+        self.spin = spin
+        super().__init__(Lx * Ly, basis)
+        #self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
+        #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
+        #self.Cx = utils.get_Cx_symmetry_map(self.Lx, self.Ly)
+        #self.Cy = utils.get_Cy_symmetry_map(self.Lx, self.Ly)
+
+        
 
         # init initial state of the circuit
+        all_bonds = []
+        for i in range(self.n_qubits):
+            for j in range(self.n_qubits):
+                if i != j:
+                    all_bonds.append((i, j))
+        self.total_spin = ls.Operator(self.basis, [ls.Interaction(SS, all_bonds)])
+
+
         self.ini_state = None
         self.ini_state = self._initial_state()
 
@@ -217,6 +228,7 @@ class SU2_PBC_symmetrized(Circuit):
 
         ### defining of unitaries ###
         self._refresh_unitaries_derivatives()
+
         return
 
     def __call__(self):
@@ -453,6 +465,7 @@ class SU2_PBC_symmetrized(Circuit):
         if self.ini_state is not None:
             return self.ini_state.copy()
 
+        '''
         state1 = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
         state2 = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
         
@@ -480,24 +493,53 @@ class SU2_PBC_symmetrized(Circuit):
         #for i in np.arange(self.Lx * self.Ly):
         #    op = ls.Operator(self.basis, [ls.Interaction(hadamard, [(i,)])])
         #    state = op(state)
+        '''
 
+        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
+        state[0] = 1.
 
-        
         singletizer = np.zeros((4, 4), dtype=np.complex128)
         singletizer[1, 0] = 1. / np.sqrt(2)
         singletizer[2, 0] = -1. / np.sqrt(2)
         singletizer = singletizer + singletizer.T
 
-        for i in np.arange(self.Lx * self.Ly)[::2]:
-            op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [(i, i + 1)])])
-            state1 = op(state1)
+        tripletizer = np.zeros((4, 4), dtype=np.complex128)
+        tripletizer[1, 0] = +1. / np.sqrt(2)
+        tripletizer[2, 0] = +1. / np.sqrt(2)
+        tripletizer = tripletizer + tripletizer.T
 
-        state = state1
+        octupletizer = np.zeros((16, 16), dtype=np.complex128)
+        #octupletizer[12, 0] = +1. / np.sqrt(6)
+        #octupletizer[9, 0] = +1. / np.sqrt(6)
+        #octupletizer[3, 0] = +1. / np.sqrt(6)
+        #octupletizer[6, 0] = +1. / np.sqrt(6)
+        #octupletizer[10, 0] = +1. / np.sqrt(6)
+        #octupletizer[5, 0] = +1. / np.sqrt(6)
+        octupletizer[15, 0] = 1.
+
+        octupletizer = octupletizer + octupletizer.T
+
+        
+        if self.spin == 0:
+            for i in np.arange(self.Lx * self.Ly)[::2]:
+                op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [(i, i + 1)])])
+                state = op(state)
+        elif self.spin == 1:
+            for i in np.arange(self.Lx * self.Ly)[::2]:
+                if i != 4:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [(i, i + 1)])])
+                else:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(tripletizer, [(i, i + 1)])])
+                state = op(state)
+        else:
+            for pair in [(0, 1), (2, 3), (4, 8), (7, 11), (12, 13), (14, 15)]:
+                op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+                state = op(state)
+            op = ls.Operator(self.basis_bare, [ls.Interaction(octupletizer, [(5, 6, 9, 10)])])
+            state = op(state)
 
         assert np.isclose(np.dot(state.conj(), state), 1.0)
-
-
-
+        
 
         state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
         for i in range(self.basis.number_states):
@@ -505,17 +547,14 @@ class SU2_PBC_symmetrized(Circuit):
             _, _, norm = self.basis.state_info(x)
             state_su2[i] = state[self.basis_bare.index(x)] / norm
 
-        #state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
-        #for idx, element in enumerate(state):
-        #    if np.isclose(element, 0.0):
-        #        continue
-        #    if len(np.where(self.basis.states == idx)[0]) > 0:
-        #        idx_in_su2 = np.where(self.basis.states == idx)[0][0]
-        #        state_su2[idx_in_su2] = element
-        #state_su2 = state_su2 * np.sqrt(2)
-        #print(np.dot(state_su2.conj(), state_su2))
         assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
 
+        if self.spin == 0.0:
+            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 0.0)
+        elif self.spin == 1.0:
+            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 2.0 * 4.)
+        else:
+            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 6.0 * 4.)
 
 
         
@@ -555,14 +594,6 @@ class SU2_PBC_symmetrized(Circuit):
 
 
         for n_layers in range(1):
-            #idxs = np.arange(self.Lx * self.Ly)
-            #np.random.shuffle(idxs)
-            #for i in range(len(idxs) // 2):
-            #    layers.append([((idxs[2 * i], idxs[2 * i + 1]), P_ij)])
-
-            #for i in range(self.Lx * self.Ly):
-            #    layers.append([((i,), sx)])
-
             for i in range(self.Lx * self.Ly):
                 layer = []
                 x, y = i % self.Lx, i // self.Ly
@@ -647,370 +678,6 @@ class SU2_PBC_symmetrized(Circuit):
             layers.append(deepcopy(layer))
 
             '''
-
-            #layer = []
-            #for i in range(self.Lx * self.Ly):
-            #    x, y = i // self.Lx, i % self.Lx
-            #    layer.append(((i,), (-1) ** (x + y) * sz))
-            #layers.append(layer)
-        
-
-
-
-        '''
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if y % 2 == 0:
-                continue
-            i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if x % 2 == 0:
-                continue
-            i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if y % 2 == 1:
-                continue
-            i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if x % 2 == 1:
-                continue
-            i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        '''
-        '''
-
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if y % 2 == 1:
-                continue
-            i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if x % 2 == 0:
-                continue
-            i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if y % 2 == 0:
-                continue
-            i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-
-            if x % 2 == 1:
-                continue
-            i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-        '''
-
-        '''        
-        ### crosses_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 0:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 1:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_2 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 1:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 0:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_3 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 0:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 1:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_4 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 1:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 0:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-        '''
-
-        
-        '''
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 0:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 1:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 1:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 0:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly 
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 0:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 1:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 1:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 1 or y % 2 != 0:
-                continue
-
-            i_to = (x + 2) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-
-
-
-
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 1 or x % 2 != 0:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 0 or x % 2 != 1:
-                continue
-
-            i_to = (x -1) % self.Lx + ((y +2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 1 or x % 2 != 1:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 0 or x % 2 != 0:
-                continue
-
-            i_to = (x - 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 0 or x % 2 != 0:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 1 or x % 2 != 1:
-                continue
-
-            i_to = (x - 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-
-        ### crosses_larger_1 ###
-        layer = []
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if y % 2 != 0 or x % 2 != 1:
-                continue
-
-            i_to = (x + 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        for i in range(self.Lx * self.Ly):
-            x, y = i % self.Lx, i // self.Ly
-            if x % 2 != 0 or y % 2 != 1:
-                continue
-
-            i_to = (x - 1) % self.Lx + ((y + 2) % self.Lx) * self.Lx
-            layer.append((i, i_to))
-        layers.append(deepcopy(layer))
-        b = np.array([i for sub in layer for i in sub])
-        assert len(np.unique(b)) == self.Lx * self.Ly
-        '''
-
         return layers
 
     def _initialize_parameters(self):

@@ -41,9 +41,7 @@ def import_config(filename: str):
     return module
 
 
-def get_x_symmetry_map(Lx, Ly, su2=False):
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-    basis.build()
+def get_x_symmetry_map(Lx, Ly, basis, su2=False):
     spins = index_to_spin(basis.states, number_spins = Lx * Ly)
 
     map_site = []
@@ -56,9 +54,7 @@ def get_x_symmetry_map(Lx, Ly, su2=False):
     spins = spins[:, map_site]
     return map_site, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
-def get_y_symmetry_map(Lx, Ly, su2=False):
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-    basis.build()
+def get_y_symmetry_map(Lx, Ly, basis, su2=False):
     spins = index_to_spin(basis.states, number_spins = Lx * Ly)
 
     map_site = []
@@ -73,10 +69,8 @@ def get_y_symmetry_map(Lx, Ly, su2=False):
 
 
 
-def get_Cx_symmetry_map(Lx, Ly, su2=False):
+def get_Cx_symmetry_map(Lx, Ly, basis, su2=False):
     n_qubits = Lx * Ly
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-    basis.build()
     spins = index_to_spin(basis.states, number_spins = Lx * Ly)
 
     map_site = []
@@ -97,7 +91,7 @@ def index_to_r(idx, Lx, Ly):
     return idx % Lx, idx // Lx
 
 
-def get_rot_symmetry_map(Lx, Ly, su2=False):
+def get_rot_symmetry_map(Lx, Ly, basis, su2=False):
     assert Lx == Ly
     assert Lx == 4
     '''
@@ -116,9 +110,6 @@ def get_rot_symmetry_map(Lx, Ly, su2=False):
 
     xmap = np.array([12, 8, 4, 0, 13, 9, 5, 1, 14, 10, 6, 2, 15, 11, 7, 3])
     n_qubits = Lx * Ly
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-    basis.build()
-    print(basis.states)
     spins = index_to_spin(basis.states, number_spins = Lx * Ly)
 
     spins = spins[:, xmap]
@@ -126,9 +117,7 @@ def get_rot_symmetry_map(Lx, Ly, su2=False):
     return xmap, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
 
-def get_Cy_symmetry_map(Lx, Ly, su2=False):
-    basis = ls.SpinBasis(ls.Group([]), number_spins=Lx * Ly, hamming_weight=Lx * Ly // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-    basis.build()
+def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
     spins = index_to_spin(basis.states, number_spins = Lx * Ly)
 
     map_site = []

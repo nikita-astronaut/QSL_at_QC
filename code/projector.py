@@ -15,10 +15,9 @@ class Projector(object):
         
 
 class ProjectorFull(Projector):
-    def __init__(self, n_qubits, su2, generators, eigenvalues, degrees):
+    def __init__(self, n_qubits, su2, basis, generators, eigenvalues, degrees):
+        self.basis = basis
         self.n_qubits = n_qubits
-        basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=n_qubits // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
-        basis.build() 
         self.basis_size = basis.number_states
 
         self.maps, self.permutations, self.characters = self._init_projector(generators, eigenvalues, degrees)
