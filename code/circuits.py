@@ -23,8 +23,10 @@ SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 class Circuit(object):
     def __init__(self, n_qubits, **kwargs):
         self.n_qubits = n_qubits
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=self.n_qubits // 2)
+        self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
         self.basis.build()
+        self.basis_su2.build()
 
     def __call__(self):
         state = self._initial_state()
@@ -370,6 +372,8 @@ class SU2_PBC_symmetrized(Circuit):
         #state[utils.spin_to_index(spin_2, number_spins = self.n_qubits)] = -1. / np.sqrt(2)
         
         return state
+        
+
         
         state1[0] = 1.
         state2[0] = 1.
