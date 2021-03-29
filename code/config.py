@@ -23,6 +23,14 @@ class opt_parameters:
         self.path_to_logs = '/users/nastrakh/QSL_at_QC/logs/j2_scan_PBC_S2_00/{:.3f}/'.format(0.1 * rank)
         os.makedirs(self.path_to_logs, exist_ok=True)
 
+        ### setting up symmetries ###
+        self.symmetries = [
+            utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+        ]
+        self.eigenvalues = [1, -1]
+        self.sectors = [0, 2]  # in Toms notation
+
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly = 4, 4
@@ -39,7 +47,11 @@ class opt_parameters:
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
                                 'j_pm' : +1., 'j_zz' : 1., \
                                 'j2': 0.1 * rank, \
-                                'BC' : self.BC}
+                                'BC' : self.BC, \
+                                'symmetries' : [s[0] for s in self.symmetries], \
+                                'sectors' : self.sectors, \
+                                'spin' : self.spin
+                                }
 
         self.circuit = circuits.SU2_OBC_symmetrized if self.BC == 'OBC' else circuits.SU2_PBC_symmetrized
         self.circuit_params_dict = {'Lx' : self.Lx, 'Ly' : self.Ly, 'spin' : self.spin, 'basis' : self.basis}
@@ -60,13 +72,13 @@ class opt_parameters:
         self.proj_params_dict = {'n_qubits' : self.Lx * self.Ly, \
                                  'su2' : self.su2, \
                                  'basis' : self.basis, \
-                                 'generators' : [utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-                                                 utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+                                 'generators' : [#utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+                                                 #utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
                                                  utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
                                                  utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
                                                 ] ,\
-                                 'eigenvalues' : [1, 1, 1, 1], \
-                                 'degrees' : [4, 4, 4, 2]}
+                                 'eigenvalues' : [1, 1], \
+                                 'degrees' : [4, 4]}
 
         self.observables = [observables.neel_order(self.Lx, self.Ly, self.basis, self.su2), \
                             observables.stripe_order(self.Lx, self.Ly, self.basis, self.su2), \

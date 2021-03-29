@@ -25,22 +25,41 @@ SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 P_ij = (SS + np.eye(4)) / 2.
 
 class Hamiltonian(object):
-    def __init__(self, basis, n_qubits, su2, **kwargs):
+    def __init__(self, basis, n_qubits, su2, symmetries, sectors, **kwargs):
         self.n_qubits = n_qubits
-        self.basis = basis
-        '''
-        spin = 2
-        Lx, Ly = 4, 4
-        self.basis = ls.SpinBasis(ls.Group([\
-            ls.Symmetry(utils.get_x_symmetry_map(Lx, Ly, basis=basis, su2=su2)[0], sector=0),
-            ls.Symmetry(utils.get_y_symmetry_map(Lx, Ly, basis=basis, su2=su2)[0], sector=0)
-        ]), number_spins=n_qubits, hamming_weight=n_qubits // 2 + spin if su2 else None)
+        #self.basis = basis
+        self.symmetries = symmetries
+        self.sectors = sectors
+        self.spin = spin
+   
+        ### obtaining ground state in the correct symmetry sector ###
+        self.basis = ls.SpinBasis(ls.Group([ls.Symmetry(s, sector=sec) for s, sec in zip(self.symmetries, self.sectors)]), \
+                                            number_spins=n_qubits, hamming_weight=n_qubits // 2 + self.spin if su2 else None)
         self.basis.build()
-        '''
+        
+
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
         energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.float64)
-        self.ground_state = ground_state.T
+        ### rewrite ground state in terms of non-symmetrized basis ###
+        gs_nonsymm = np.zeros(basis.number_states, dtype=np.complex128)
+        gs_symm = ground_state[:, 0]
+        for i in range(basis.number_states):
+            nonsymm_state = basis.states[i]
+            rep, character, norm = self.basis.state_info(nonsymm_state)
+            gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
+        self.ground_state = gs_nonsymm[np.newaxis, :]
+        assert np.isclose(np.dot(gs_nonsymm.conj(), gs_nonsymm), 1.0)
+
+
+
+        ### finally obtaining the GS in the nonsymmetric basis (provided from config) ###
+        self.basis = basis
+        self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)   
+
+
+
+        #self.ground_state = ground_state.T
         self.nterms = len(self._terms)
         print('ground state energy:', energy[0] - self.energy_renorm)
         print('system gap =', energy[1] - energy[0])
