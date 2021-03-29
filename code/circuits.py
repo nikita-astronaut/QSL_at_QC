@@ -203,7 +203,7 @@ class SU2_PBC_symmetrized(Circuit):
         #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
         #self.Cx = utils.get_Cx_symmetry_map(self.Lx, self.Ly)
         #self.Cy = utils.get_Cy_symmetry_map(self.Lx, self.Ly)
-
+        
         
 
         # init initial state of the circuit
@@ -546,7 +546,9 @@ class SU2_PBC_symmetrized(Circuit):
             x = self.basis.states[i]
             _, _, norm = self.basis.state_info(x)
             state_su2[i] = state[self.basis_bare.index(x)] / norm
+            print(state[self.basis_bare.index(x)] / norm)
 
+        print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
         assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
 
         if self.spin == 0.0:
