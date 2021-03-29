@@ -5,6 +5,7 @@ from scipy import sparse
 import lattice_symmetries as ls
 import scipy
 import utils
+from time import time
 
 sz = np.array([[1, 0], \
                [0, -1]])
@@ -23,10 +24,11 @@ SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 class Circuit(object):
     def __init__(self, n_qubits, **kwargs):
         self.n_qubits = n_qubits
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=self.n_qubits // 2)
-        self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=self.n_qubits // 2)#, spin_inversion=-1)
         self.basis.build()
-        self.basis_su2.build()
+
+        self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
+        self.basis_bare.build()
 
     def __call__(self):
         state = self._initial_state()
@@ -36,30 +38,14 @@ class Circuit(object):
         assert np.isclose(np.dot(state, state), 1.0)
         return state
 
-    def get_all_derivatives(self, hamiltonian):
-        LEFT = hamiltonian(self.__call__())
-        for u_herm in reversed(self.unitaries_herm):
-            LEFT = u_herm(LEFT)
-        LEFT = LEFT.conj()
+    def get_natural_gradients(self, hamiltonian, projector, N_samples=None):
+        ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, N_samples)
+        self.connectivity_sampling = j_sampling
+        grads, grads_sampling = self.get_all_derivatives(hamiltonian, projector, N_samples)
 
-        RIGHT = self._initial_state()
-
-        grads = []
-        for i in range(len(self.derivatives)):
-            grads.append(np.dot(LEFT, self.derivatives[i](RIGHT)))
-
-            RIGHT = self.unitaries[i](RIGHT)
-            LEFT = (self.unitaries[i](LEFT.conj())).conj()
-
-        assert np.allclose(np.array(grads).imag, np.array(grads) * 0.0)
-
-        return 2 * np.array(grads).real
-
-    def get_natural_gradients(self, hamiltonian):
-        grads = self.get_all_derivatives(hamiltonian)
-        ij, j = self.get_metric_tensor()
-        G = ij - np.einsum('i,j->ij', j.conj(), j)
-        return grads, ij, j
+        if N_samples is None:
+            return grads, ij, j
+        return grads, ij, j, grads_sampling, ij_sampling, j_sampling
 
     def _get_derivative_idx(self, param_idx):
         return self.derivatives[param_idx]
@@ -242,11 +228,10 @@ class SU2_PBC_symmetrized(Circuit):
         #assert np.allclose(state, state[self.tr_y[self.tr_y]])
         #assert np.allclose(state, state[self.Cx])
         #assert np.allclose(state, state[self.Cy])
-
         return state
 
 
-    def get_all_derivatives(self, hamiltonian, projector):
+    def get_all_derivatives(self, hamiltonian, projector, N_samples):
         state = self.__call__()
         state_proj = projector(state)
         norm = np.dot(state.conj(), state_proj)
@@ -267,13 +252,17 @@ class SU2_PBC_symmetrized(Circuit):
 
 
         grads = []
+        numerators = []
+        numerators_conn = []
         for idx, layer in enumerate(self.unitaries):
             derivative = RIGHT * 0.0
             for der in self.derivatives[idx]:
                 derivative += der(RIGHT)
 
             grad = np.dot(LEFT, derivative) / norm
+            numerators.append(np.dot(LEFT, derivative))
             grad -= np.dot(LEFT_conn, derivative) / norm * energy
+            numerators_conn.append(np.dot(LEFT_conn, derivative))
             grads.append(2 * grad.real)
 
 
@@ -286,10 +275,62 @@ class SU2_PBC_symmetrized(Circuit):
             LEFT = LEFT.conj()
             LEFT_conn = LEFT_conn.conj()
 
-        return np.array(grads)
+
+        if N_samples is None:
+            return np.array(grads), None
+
+        derivatives_sampling = utils.compute_energy_der_sample(self.__call__(), self.der_states, hamiltonian, projector, N_samples)
+        norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples)
+        energy_sampling = utils.compute_energy_sample(self.__call__(), hamiltonian, projector, N_samples)
+
+        grad_sampling = (derivatives_sampling / norm_sampling - self.connectivity_sampling * energy_sampling / norm_sampling).real * 2.
 
 
-    def get_metric_tensor(self):
+
+        #for i in range(len(self.params)):
+        #    print((derivatives_sampling[i] / norm_sampling).real * 2., (numerators[i] / norm).real * 2., '|', \
+        #           (self.connectivity_sampling[i] * energy_sampling / norm_sampling).real * 2., (numerators_conn[i] / norm * energy).real * 2.)
+        #    print(grad_sampling[i], np.array(grads)[i])
+        print('energy sampling:', energy_sampling / norm_sampling - 33, 'energy exact', energy - 33)
+        #exit(-1)
+
+
+        ### sampling testing ###
+        '''
+        new_params = self.params.copy()
+        for i in range(len(self.params)):
+            new_params[i] += np.pi / 4.
+            self.set_parameters(new_params)
+            state = self.__call__()
+            state_proj = projector(state)
+
+            energy_plus = np.dot(np.conj(state), hamiltonian(state_proj))
+            norm_plus = np.dot(np.conj(state), state_proj)
+            
+            energy_plus_sample = utils.compute_energy_sample(self.__call__(), hamiltonian, projector, N_samples)
+            norm_plus_sample = utils.compute_norm_sample(self.__call__(), projector, N_samples)
+
+            new_params[i] -= np.pi / 2.
+            self.set_parameters(new_params)
+            energy_minus_sample = utils.compute_energy_sample(self.__call__(), hamiltonian, projector, N_samples)
+            norm_minus_sample = utils.compute_norm_sample(self.__call__(), projector, N_samples)
+            state = self.__call__()
+            state_proj = projector(state)
+
+            energy_minus = np.dot(np.conj(state), hamiltonian(state_proj))
+            norm_minus = np.dot(np.conj(state), state_proj)
+
+            new_params[i] += np.pi / 4.
+            self.set_parameters(new_params)
+
+            print('energy derivative', i, numerators[i].real * 2., energy_plus - energy_minus, energy_plus_sample - energy_minus_sample)
+            print('connectivity', i, numerators_conn[i].real * 2, norm_plus - norm_minus, norm_plus_sample - norm_minus_sample)
+
+        '''
+        return np.array(grads), grad_sampling
+
+
+    def get_metric_tensor(self, projector, N_samples):
         MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
 
         left_beforeder = self._initial_state()
@@ -310,29 +351,46 @@ class SU2_PBC_symmetrized(Circuit):
                 for u in layer:
                     LEFT = u(LEFT) # L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
 
+            LEFT = projector(LEFT) # P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+
             for layer in reversed(self.unitaries_herm):
                 for u_herm in reversed(layer):
-                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+
+
+
+
 
             RIGHT = self._initial_state()  # RIGHT = |0>
-            for j in range(len(self.params)):
+            for j in range(i):
+                for u in self.unitaries[j]:
+                    RIGHT = u(RIGHT)
+                    LEFT = u(LEFT)
+
+
+            for j in range(i, len(self.params)):
                 derivative = RIGHT * 0.
                 for der in self.derivatives[j]:
                     derivative += der(RIGHT)
 
                 MT[i, j] = np.dot(LEFT.conj(), derivative)
+                MT[j, i] = np.conj(MT[i, j])
 
                 for u in self.unitaries[j]:
-                    RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                    RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
                     LEFT = u(LEFT) # RIGHT = L_j ... L_0 |0>
 
 
         der_i = np.zeros(len(self.params), dtype=np.complex128)
-        LEFT = self.__call__() # L_{N-1} ... L_0 |0>
+        LEFT = self.__call__()  # L_{N-1} ... L_0 |0>
+        LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
+
+        norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
+        MT = MT / norm
 
         for layer in reversed(self.unitaries_herm):
             for u_herm in reversed(layer):
-                LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
+                LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
 
         RIGHT = self._initial_state()   # RIGHT = |0>
         for i in range(len(self.params)):
@@ -340,15 +398,50 @@ class SU2_PBC_symmetrized(Circuit):
             for der in self.derivatives[i]:
                 derivative += der(RIGHT)
 
-            der_i[i] = np.dot(LEFT.conj(), derivative)
+            der_i[i] = np.dot(LEFT.conj(), derivative) / norm  # <psi|P|di psi>
 
             for u in self.unitaries[i]:
-                RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} L_{N - 1} ... L_0 |0>
+                RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
                 LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
+
+        if N_samples is None:
+            return MT, der_i, None, None
 
         # MT -= np.einsum('i,j->ij', der_i.conj(), der_i)
 
-        return MT, der_i
+        MT_sample, connectivity = self.get_metric_tensor_sampling(projector, N_samples)
+        norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples)
+        #print(np.save('test_MT.npy', MT_sample))
+        #assert np.allclose(MT_sample, MT_sample.conj().T)
+        #for i in range(MT.shape[0]):
+        #    for j in range(MT.shape[1]):
+        #        print(MT[i, j] * norm, MT_sample[i, j])
+        
+        #for i in range(connectivity.shape[0]):
+        #    print(der_i[i] * norm, connectivity[i])
+
+        
+
+        return MT, der_i, MT_sample / norm_sampling, connectivity / norm_sampling
+
+    def get_metric_tensor_sampling(self, projector, N_samples):
+        ### get states ###
+        self.der_states = []
+        new_params = self.params.copy()
+
+        t = time()
+        for i in range(len(self.params)):
+            new_params[i] += np.pi / 2.
+            self.set_parameters(new_params)
+            self.der_states.append(self.__call__())
+            new_params[i] -= np.pi / 2.
+        self.set_parameters(new_params)
+        print('obtain states for MT ', time() - t)
+        metric_tensor = utils.compute_metric_tensor_sample(self.der_states, projector, N_samples, theta=0.) + \
+                        1.0j * utils.compute_metric_tensor_sample(self.der_states, projector, N_samples, theta=-np.pi / 2.)
+        connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=0.) + \
+                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=-np.pi / 2.)
+        return metric_tensor, connectivity
 
 
     def _initial_state(self):
@@ -371,7 +464,7 @@ class SU2_PBC_symmetrized(Circuit):
         state[utils.spin_to_index(spin_1, number_spins = self.n_qubits)] = 1.# / np.sqrt(2)
         #state[utils.spin_to_index(spin_2, number_spins = self.n_qubits)] = -1. / np.sqrt(2)
         
-        return state
+        #return state
         
 
         
@@ -391,40 +484,37 @@ class SU2_PBC_symmetrized(Circuit):
         singletizer = singletizer + singletizer.T
 
         for i in np.arange(self.Lx * self.Ly)[::2]:
-            op = ls.Operator(self.basis, [ls.Interaction(singletizer, [(i, i + 1)])])
+            op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [(i, i + 1)])])
             state1 = op(state1)
 
-        for pair in [(1, 2), (3, 0), (5, 6), (7, 4), (9, 10), (11, 8), (13, 14), (15, 12)]:
-            op = ls.Operator(self.basis, [ls.Interaction(singletizer, [pair])])
-            state2 = op(state2)
-        
-        state = (state1 + state2)
-        state = state / np.sqrt(np.dot(state.conj(), state))
-
-        # state = state1
-        #for i in range(len(state)):
-        #    if np.abs(state[i]) > 0 or np.abs(state1[i]) > 0 or np.abs(state2[i]) > 0:
-        #        print(state[i], state1[i], state2[i])
-        #print(state)
+        state = state1
 
         assert np.isclose(np.dot(state.conj(), state), 1.0)
 
-        all_bonds = []
-        for i in range(self.Lx * self.Ly):
-            for j in range(self.Lx * self.Ly):
-                if i == j:
-                    continue
-                all_bonds.append((i, j))
-        self.total_spin = ls.Operator(self.basis, [ls.Interaction(SS, all_bonds)])
-        assert np.isclose(np.dot(state.conj(), self.total_spin(state)) + 3 * self.Lx * self.Ly, 0.0)
-        assert np.allclose(state, state[self.tr_x])
-        assert np.allclose(state, state[self.tr_y])
-        assert np.allclose(state, state[self.tr_x[self.tr_x]])
-        assert np.allclose(state, state[self.tr_y[self.tr_y]])
-        assert np.allclose(state, state[self.Cx])
-        assert np.allclose(state, state[self.Cy])
 
-        return state
+
+
+        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
+        for i in range(self.basis.number_states):
+            x = self.basis.states[i]
+            _, _, norm = self.basis.state_info(x)
+            state_su2[i] = state[self.basis_bare.index(x)] / norm
+
+        #state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
+        #for idx, element in enumerate(state):
+        #    if np.isclose(element, 0.0):
+        #        continue
+        #    if len(np.where(self.basis.states == idx)[0]) > 0:
+        #        idx_in_su2 = np.where(self.basis.states == idx)[0][0]
+        #        state_su2[idx_in_su2] = element
+        #state_su2 = state_su2 * np.sqrt(2)
+        #print(np.dot(state_su2.conj(), state_su2))
+        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
+
+
+
+        
+        return state_su2
 
     def get_pairwise_distances(self):
         distances = np.zeros((self.Lx * self.Ly, self.Lx * self.Ly))
@@ -459,7 +549,7 @@ class SU2_PBC_symmetrized(Circuit):
         P_ij = (SS + np.eye(4)) / 2.
 
 
-        for n_layers in range(3):
+        for n_layers in range(1):
             #idxs = np.arange(self.Lx * self.Ly)
             #np.random.shuffle(idxs)
             #for i in range(len(idxs) // 2):
@@ -468,45 +558,45 @@ class SU2_PBC_symmetrized(Circuit):
             #for i in range(self.Lx * self.Ly):
             #    layers.append([((i,), sx)])
 
-            layer = []
             for i in range(self.Lx * self.Ly):
+                layer = []
                 x, y = i % self.Lx, i // self.Ly
 
                 if y % 2 == 0:
                     continue
                 i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
                 layer.append(((i, i_to), P_ij))
-            layers.append(deepcopy(layer))
+                layers.append(deepcopy(layer))
 
-            layer = []
             for i in range(self.Lx * self.Ly):
+                layer = []
                 x, y = i % self.Lx, i // self.Ly
 
                 if y % 2 == 1:
                     continue
                 i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
                 layer.append(((i, i_to), P_ij))
-            layers.append(deepcopy(layer))
+                layers.append(deepcopy(layer))
 
-            layer = []
             for i in range(self.Lx * self.Ly):
+                layer = []
                 x, y = i % self.Lx, i // self.Ly
 
                 if x % 2 == 0:
                     continue
                 i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
                 layer.append(((i, i_to), P_ij))
-            layers.append(deepcopy(layer))
+                layers.append(deepcopy(layer))
 
-            layer = []
             for i in range(self.Lx * self.Ly):
+                layer = []
                 x, y = i % self.Lx, i // self.Ly
 
                 if x % 2 == 1:
                     continue
                 i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
                 layer.append(((i, i_to), P_ij))
-            layers.append(deepcopy(layer))
+                layers.append(deepcopy(layer))
 
 
             '''
@@ -553,11 +643,11 @@ class SU2_PBC_symmetrized(Circuit):
 
             '''
 
-            layer = []
-            for i in range(self.Lx * self.Ly):
-                x, y = i // self.Lx, i % self.Lx
-                layer.append(((i,), (-1) ** (x + y) * sz))
-            layers.append(layer)
+            #layer = []
+            #for i in range(self.Lx * self.Ly):
+            #    x, y = i // self.Lx, i % self.Lx
+            #    layer.append(((i,), (-1) ** (x + y) * sz))
+            #layers.append(layer)
         
 
 
@@ -919,7 +1009,15 @@ class SU2_PBC_symmetrized(Circuit):
         return layers
 
     def _initialize_parameters(self):
+        return np.array([-0.12880534, -0.15394351,  0.0178121 , -0.0251028 , -0.18499064,
+       -0.14574738, -0.5090549 , -0.49933648,  2.09459016, -1.04898266,
+       -0.25793403,  0.31757792, -0.07286887,  0.22076982, -0.24315979,
+       -0.27846175, -0.30166733,  0.33427832, -0.0797287 , -0.67497602,
+       -0.15076805, -0.37842132,  0.03339797,  0.18796622,  0.93806738,
+       -0.88963205,  0.13248908, -0.87632235, -0.2808805 , -0.77110254,
+        0.60754454, -0.25314813])
         return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
+
 
     def _refresh_unitaries_derivatives(self):
         self.unitaries = []
@@ -953,3 +1051,116 @@ class SU2_PBC_symmetrized(Circuit):
             self.derivatives.append(derivatives_layer)
 
         return
+
+
+class SU2_OBC_symmetrized(SU2_PBC_symmetrized):
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+
+
+        for n_layers in range(1):
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 0:
+                    continue
+                i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
+                if y + 1 < self.Ly:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 1:
+                    continue
+                i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
+                if y + 1 < self.Ly:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if x % 2 == 0:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
+                if x + 1 < self.Lx:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if x % 2 == 1:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
+                if x + 1 < self.Lx:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+
+            '''
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 0:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
+                if y + 1 < self.Ly and x + 1 < self.Lx:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 1:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
+                if y + 1 < self.Ly and x + 1 < self.Lx:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 0:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
+                if x + 1 < self.Lx and y > 0:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 1:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
+                if x + 1 < self.Lx and y > 0:
+                    layer.append(((i, i_to), P_ij))
+                    layers.append(deepcopy(layer))
+
+            '''
+
+        return layers
+
+    def _initialize_parameters(self):
+        '''
+        return np.array([ 0.36847358,  0.20824003, -0.29405129, -0.04208926,  0.16732006,
+       -0.15316127, -0.64537809, -0.41338112,  0.09544638, -0.08481091,
+       -0.01030286, -0.24712847, -0.04713739, -0.03406516, -0.03386724,
+        0.36663854,  0.33666823, -0.95222789,  0.18822666, -0.22752729,
+        0.77524206, -0.81591527,  0.82763476,  0.03737368])
+        '''
+        return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1

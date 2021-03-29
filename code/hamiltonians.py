@@ -20,23 +20,31 @@ sz_sparse = sp.sparse.csr_matrix(sz)
 s0_sparse = sp.sparse.csr_matrix(s0)
 
 
+SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
+P_ij = (SS + np.eye(4)) / 2.
+print(P_ij)
 
 class Hamiltonian(object):
-    def __init__(self, n_qubits, **kwargs):
+    def __init__(self, n_qubits, su2, **kwargs):
         self.n_qubits = n_qubits
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=n_qubits // 2 if su2 else None)#, spin_inversion=-1 if su2 else 0)
         self.basis.build()
 
-        self._matrix = self._get_Hamiltonian_matrix(**kwargs)
+        self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
         energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.float64)
+        self.ground_state = ground_state.T
+        self.nterms = len(self._terms)
         print('ground state energy:', energy[0])
         print('system gap =', energy[1] - energy[0])
         print('ground state vector:', ground_state[:, 0])
         return
 
-    def __call__(self, bra):
-        return self._matrix(bra)
+    def __call__(self, bra, n_term = None):
+        if n_term is None:
+            return self._matrix(bra)
+        return self._terms[n_term][0](bra), self._terms[n_term][1]
+
 
     def _get_Hamiltonian_matrix(self, **kwargs):
         raise NotImplementedError()
@@ -47,7 +55,7 @@ class HeisenbergSquareNNBipartiteOBC(Hamiltonian):
         assert Lx % 2 == 0  # here we only ocnsider bipartite systems 
         assert Ly % 2 == 0
 
-        operator = j_pm * (np.kron(sx, sx) + np.kron(sy, sy)) + j_zz * np.kron(sz, sz)
+        operator = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
         n_sites = Lx * Ly
 
         bonds = []
@@ -62,7 +70,7 @@ class HeisenbergSquareNNBipartiteOBC(Hamiltonian):
             if y + 1 < Ly:
                 bonds.append((site, site_right))
         print('bonds = ', bonds)
-        return ls.Operator(self.basis, [ls.Interaction(operator, bonds)])
+        return ls.Operator(self.basis, [ls.Interaction(operator, bonds)]), [ls.Operator(self.basis, [ls.Interaction(operator, [bond])]) for bond in bonds]
 
 
 class HeisenbergSquareNNBipartitePBC(Hamiltonian):
@@ -82,15 +90,15 @@ class HeisenbergSquareNNBipartitePBC(Hamiltonian):
             bonds.append((site, site_up))
             bonds.append((site, site_right))
         print('bonds = ', bonds)
-        return ls.Operator(self.basis, [ls.Interaction(operator, bonds)])
+        return ls.Operator(self.basis, [ls.Interaction(operator, bonds)]), [ls.Operator(self.basis, [ls.Interaction(operator, [bond])]) for bond in bonds]
 
-class HeisenbergSquareNNNBipartitePBC(Hamiltonian):
-    def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0.):
+class HeisenbergSquare(Hamiltonian):
+    def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0., BC='PBC'):
         assert Lx % 2 == 0  # here we only ocnsider bipartite systems
         assert Ly % 2 == 0
 
-        operator = j_pm * (np.kron(sx, sx) + np.kron(sy, sy)) + j_zz * np.kron(sz, sz)
-        operator_j2 = j2 * (j_pm * (np.kron(sx, sx) + np.kron(sy, sy)) + j_zz * np.kron(sz, sz))
+        operator = P_ij
+        operator_j2 = P_ij
         n_sites = Lx * Ly
 
         bonds = []
@@ -100,13 +108,21 @@ class HeisenbergSquareNNNBipartitePBC(Hamiltonian):
 
             site_up = ((x + 1) % Lx) + y * Lx
             site_right = x + ((y + 1) % Ly) * Lx
-            bonds.append((site, site_up))
-            bonds.append((site, site_right))
+            if x + 1 < Lx or BC == 'PBC':
+                bonds.append((site, site_up))
+            if y + 1 < Ly or BC == 'PBC':
+                bonds.append((site, site_right))
+
 
             site_up = ((x + 1) % Lx) + ((y + 1) % Ly) * Lx
             site_right = ((x + 1) % Lx) + ((y - 1) % Ly) * Lx
-            bonds_j2.append((site, site_up))
-            bonds_j2.append((site, site_right))
+            if (x + 1 < Lx and y + 1 < Ly) or BC == 'PBC':
+                bonds_j2.append((site, site_up))
+            if (x + 1 < Lx and y - 1 >= 0) or BC == 'PBC':
+                bonds_j2.append((site, site_right))
 
-        return ls.Operator(self.basis, [ls.Interaction(operator, bonds), ls.Interaction(operator_j2, bonds_j2)])
-
+        self.energy_renorm = len(bonds) + len(bonds_j2) * j2.
+        return ls.Operator(self.basis, [ls.Interaction(operator * 2, bonds), ls.Interaction(j2 * operator_j2 * 2, bonds_j2)]),\
+               [[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 2] for bond in bonds] + \
+               [[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2], \
+               bonds + bonds_j2
