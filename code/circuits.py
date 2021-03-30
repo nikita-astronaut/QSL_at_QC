@@ -22,8 +22,9 @@ s0 = np.eye(2)
 SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 
 class Circuit(object):
-    def __init__(self, n_qubits, basis, **kwargs):
+    def __init__(self, n_qubits, basis, config, **kwargs):
         self.basis = basis
+        self.config = config
         self.n_qubits = n_qubits
 
         self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
@@ -684,14 +685,17 @@ class SU2_PBC_symmetrized(Circuit):
         return layers
 
     def _initialize_parameters(self):
-        return np.array([-0.12880534, -0.15394351,  0.0178121 , -0.0251028 , -0.18499064,
-       -0.14574738, -0.5090549 , -0.49933648,  2.09459016, -1.04898266,
-       -0.25793403,  0.31757792, -0.07286887,  0.22076982, -0.24315979,
-       -0.27846175, -0.30166733,  0.33427832, -0.0797287 , -0.67497602,
-       -0.15076805, -0.37842132,  0.03339797,  0.18796622,  0.93806738,
-       -0.88963205,  0.13248908, -0.87632235, -0.2808805 , -0.77110254,
-        0.60754454, -0.25314813])
-        return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
+        if self.config.mode == 'random':
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
+        try:
+            parameters_log = open(os.path.join(self.config.path_to_logs, 'parameters_log.dat'), 'r') 
+            last_line = parameters_log.readlines()[-1]
+            print('last line: ', last_line)
+            arr = 'np.array([' + last_line + '])'
+            print(arr)
+            return eval(arr)
+        except:
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
 
 
     def _refresh_unitaries_derivatives(self):
@@ -829,13 +833,3 @@ class SU2_OBC_symmetrized(SU2_PBC_symmetrized):
             
 
         return layers
-
-    def _initialize_parameters(self):
-        '''
-        return np.array([ 0.36847358,  0.20824003, -0.29405129, -0.04208926,  0.16732006,
-       -0.15316127, -0.64537809, -0.41338112,  0.09544638, -0.08481091,
-       -0.01030286, -0.24712847, -0.04713739, -0.03406516, -0.03386724,
-        0.36663854,  0.33666823, -0.95222789,  0.18822666, -0.22752729,
-        0.77524206, -0.81591527,  0.82763476,  0.03737368])
-        '''
-        return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1

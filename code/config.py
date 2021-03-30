@@ -11,18 +11,18 @@ import sys
 import os
 
 ### setting the MPI up ###
-#from mpi4py import MPI
-#comm = MPI.COMM_WORLD
-#rank = comm.Get_rank()
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
 
 
 
 class opt_parameters:
     def __init__(self):
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(0.0)#0.1 * rank)
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(0.1 * rank)
         os.makedirs(self.path_to_logs, exist_ok=True)
-
+        self.mode = 'continue'
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly = 4, 4
@@ -31,7 +31,7 @@ class opt_parameters:
         self.spin = 1
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
-
+        
 
         ### setting up symmetries ###
         self.symmetries = [
@@ -57,7 +57,7 @@ class opt_parameters:
                                 }
 
         self.circuit = circuits.SU2_OBC_symmetrized if self.BC == 'OBC' else circuits.SU2_PBC_symmetrized
-        self.circuit_params_dict = {'Lx' : self.Lx, 'Ly' : self.Ly, 'spin' : self.spin, 'basis' : self.basis}
+        self.circuit_params_dict = {'Lx' : self.Lx, 'Ly' : self.Ly, 'spin' : self.spin, 'basis' : self.basis, 'config' : self}
         
 
         self.projector = projector.ProjectorFull
@@ -84,7 +84,7 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 8
+        self.N_samples = 2 ** 10
         self.SR_eig_cut = 1e-2
         self.SR_diag_reg = 1e-2
 
