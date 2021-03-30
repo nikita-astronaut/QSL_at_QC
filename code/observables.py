@@ -23,7 +23,7 @@ def neel_order(Lx, Ly, basis, su2=False):
     site_minus = []
     for x in range(Lx):
         for y in range(Ly):
-            if x + y % 2 == 0:
+            if (x + y) % 2 == 0:
                 site_plus.append(x + y * Lx)
             else:
                 site_minus.append(x + y * Lx)
