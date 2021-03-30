@@ -47,7 +47,8 @@ class Hamiltonian(object):
         for i in range(basis.number_states):
             nonsymm_state = basis.states[i]
             rep, character, norm = self.basis.state_info(nonsymm_state)
-            gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
+            if norm != 0.:
+                gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
         self.ground_state = gs_nonsymm[np.newaxis, :]
         assert np.isclose(np.dot(gs_nonsymm.conj(), gs_nonsymm), 1.0)
 
