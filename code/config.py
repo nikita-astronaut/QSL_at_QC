@@ -20,7 +20,7 @@ import os
 class opt_parameters:
     def __init__(self):
         #j2 = 0.1 * rank
-        j2 = 0.
+        j2 = float(sys.argv[2])
         ### preparing the logging ###
         self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
@@ -29,20 +29,24 @@ class opt_parameters:
         ### setting up geometry and parameters ###
         self.Lx, self.Ly = 4, 4
         self.su2 = True
-        self.BC = 'PBC'
-        self.spin = 1
+        self.BC = 'OBC'
+        self.spin = 0
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
         
 
         ### setting up symmetries ###
         self.symmetries = [
-            utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+            #utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+            
         ]
-        self.eigenvalues = [-1, -1]
-        self.sectors = [2, 2]  # in Toms notation
-        self.degrees = [4, 4]
+        self.eigenvalues = [1, 1]
+        self.sectors = [0, 0]  # in Toms notation
+        self.degrees = [4, 2]
 
 
         self.hamiltonian = hamiltonians.HeisenbergSquare;
@@ -86,8 +90,8 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 10
-        self.SR_eig_cut = 1e-2
-        self.SR_diag_reg = 1e-2
+        self.N_samples = None #2 ** 10
+        self.SR_eig_cut = 0.#1e-2
+        self.SR_diag_reg = 1e-3#1e-2
 
         return

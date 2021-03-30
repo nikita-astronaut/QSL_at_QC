@@ -99,10 +99,12 @@ class Observables(object):
 
 
         force = self.circuit.forces
-        for f in force:
-            self.force_log.write('{:.4f} '.format(f))
-        self.force_log.write('\n')
-        self.force_log.flush()
+        if force is not None:
+            for f in force:
+                self.force_log.write('{:.4f} '.format(f))
+            self.force_log.write('\n')
+            self.force_log.flush()
+
 
         force_SR_exact = self.circuit.forces_SR_exact
         for f in force_SR_exact:
@@ -112,10 +114,11 @@ class Observables(object):
 
 
         force_SR = self.circuit.forces_SR
-        for f in force_SR:
-            self.force_SR_log.write('{:.4f} '.format(f))
-        self.force_SR_log.write('\n')
-        self.force_SR_log.flush()
+        if force_SR is not None:
+            for f in force_SR:
+                self.force_SR_log.write('{:.4f} '.format(f))
+            self.force_SR_log.write('\n')
+            self.force_SR_log.flush()
 
 
         parameters = self.circuit.params

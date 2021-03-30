@@ -57,7 +57,10 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
     circuit, hamiltonian, config, projector = args
     for n_iter in range(n_iter):
         cur_params = circuit.get_parameters()
-        grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
+        if config.N_samples is None:
+            grads_exact, ij_exact, der_one_exact = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
+        else:
+            grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
         
         #print('grads_exact:', grads_exact)
         #print('grads_sampled:', grads)
@@ -70,7 +73,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         #        print(i, j, ij_exact[i, j], ij[i, j])
         #exit(-1)
         #print('ij discrepancy:',  np.linalg.norm(ij - ij_exact) / np.linalg.norm(ij_exact))
-        MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
+        if config.N_samples is not None:
+            MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
         MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
 
         #print('MT discrepancy:',  np.linalg.norm(MT - MT_exact) / np.linalg.norm(MT_exact))
@@ -113,28 +117,30 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         
 
         #circuit.set_parameters(cur_params)
-        MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
-        MT += config.SR_diag_reg * np.diag(np.diag(MT))
-        assert np.allclose(MT, MT.T)
+        if config.N_samples is not None:
+            MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
+            MT += config.SR_diag_reg * np.diag(np.diag(MT))
+            assert np.allclose(MT, MT.T)
 
 
-        s, u = np.linalg.eigh(MT)
-        #print('s sampled:', s)
-        #print('u sampled:', u.T)
-        MT_inv = np.zeros(MT.shape)
-        keep_lambdas = (s / s.max()) > config.SR_eig_cut
-        for lambda_idx in range(len(s)):
-            if not keep_lambdas[lambda_idx]:
-                continue
-            MT_inv += (1. / s[lambda_idx]) * \
-                    np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
+            s, u = np.linalg.eigh(MT)
+            #print('s sampled:', s)
+            #print('u sampled:', u.T)
+            MT_inv = np.zeros(MT.shape)
+            keep_lambdas = (s / s.max()) > config.SR_eig_cut
+            for lambda_idx in range(len(s)):
+                if not keep_lambdas[lambda_idx]:
+                    continue
+                MT_inv += (1. / s[lambda_idx]) * \
+                        np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
 
-        circuit.forces = grads.copy()
-        grads = MT_inv.dot(grads)
-        circuit.forces_SR = grads.copy()
+            circuit.forces = grads.copy()
+            grads = MT_inv.dot(grads)
+            circuit.forces_SR = grads.copy()
 
         MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
         MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
+        MT_exact += np.eye(MT_exact.shape[0]) * 1e-4
 
         assert np.allclose(MT_exact, MT_exact.T)
 
@@ -143,13 +149,15 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         #print('u exact:', u.T)
 
         MTe_inv = np.zeros(MT_exact.shape)
-        keep_lambdas = (s / s.max()) > config.SR_eig_cut
+        keep_lambdas = (s / s.max()) > config.SR_eig_cut - 1e-6
+        #print(keep_lambdas)
+        #print(u)
         for lambda_idx in range(len(s)):
             if not keep_lambdas[lambda_idx]:
                 continue
             MTe_inv += (1. / s[lambda_idx]) * \
                       np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
-
+        assert np.allclose(MTe_inv, np.linalg.inv(MT_exact))
 
         circuit.forces_exact = grads_exact.copy()
         grads_exact = MTe_inv.dot(grads_exact)
@@ -159,7 +167,10 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         #    grads = 3 * grads / np.sqrt(np.sum(grads ** 2))
 
 
-        new_params = (cur_params - lr * grads).real
+        if config.N_samples is not None:
+            new_params = (cur_params - lr * grads).real
+        else:
+            new_params = (cur_params - lr * grads_exact).real
         
         #print('forces_sampled =', repr(grads))
         #print('forces_exact =', repr(grads_exact))

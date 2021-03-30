@@ -40,7 +40,24 @@ class Hamiltonian(object):
 
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.float64)
+        energy, ground_state = ls.diagonalize(self._matrix, k = 6, dtype=np.float64)
+
+        ### DEBUG
+        '''       
+        print(energy - self.energy_renorm)
+        all_bonds = []
+        for i in range(self.n_qubits):
+            for j in range(self.n_qubits):
+                if i != j:
+                    all_bonds.append((i, j))
+        total_spin = ls.Operator(self.basis, [ls.Interaction(SS, all_bonds)])        
+        for s in ground_state.T:
+            print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
+
+        exit(-1)
+        '''
+        ### END DEBUG
+
         ### rewrite ground state in terms of non-symmetrized basis ###
         gs_nonsymm = np.zeros(basis.number_states, dtype=np.complex128)
         gs_symm = ground_state[:, 0]
