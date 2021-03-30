@@ -66,14 +66,15 @@ def dimer_order(Lx, Ly, basis, su2=False, BC='PBC'):
 class Observables(object):
     def __init__(self, config, hamiltonian, circuit, projector):
         self.path_to_logs = config.path_to_logs
+        openmode = 'a' if config.mode == 'continue' else 'w'
 
-        self.main_log = open(os.path.join(self.path_to_logs, 'main_log.dat'), 'w')
-        self.force_log = open(os.path.join(self.path_to_logs, 'force_log.dat'), 'w')
-        self.exact_force_log = open(os.path.join(self.path_to_logs, 'exact_force_log.dat'), 'w')
-        self.force_SR_log = open(os.path.join(self.path_to_logs, 'force_SR_log.dat'), 'w')
-        self.exact_force_SR_log = open(os.path.join(self.path_to_logs, 'exact_force_SR_log.dat'), 'w')
+        self.main_log = open(os.path.join(self.path_to_logs, 'main_log.dat'), openmode)
+        self.force_log = open(os.path.join(self.path_to_logs, 'force_log.dat'), openmode)
+        self.exact_force_log = open(os.path.join(self.path_to_logs, 'exact_force_log.dat'), openmode)
+        self.force_SR_log = open(os.path.join(self.path_to_logs, 'force_SR_log.dat'), openmode)
+        self.exact_force_SR_log = open(os.path.join(self.path_to_logs, 'exact_force_SR_log.dat'), openmode)
 
-        self.parameters_log = open(os.path.join(self.path_to_logs, 'parameters_log.dat'), 'w')
+        self.parameters_log = open(os.path.join(self.path_to_logs, 'parameters_log.dat'), openmode)
 
         self.observables = config.observables
         self.hamiltonian = hamiltonian

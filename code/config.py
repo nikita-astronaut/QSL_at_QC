@@ -11,16 +11,18 @@ import sys
 import os
 
 ### setting the MPI up ###
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+#from mpi4py import MPI
+#comm = MPI.COMM_WORLD
+#rank = comm.Get_rank()
 
 
 
 class opt_parameters:
     def __init__(self):
+        #j2 = 0.1 * rank
+        j2 = 0.
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(0.1 * rank)
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
 
@@ -49,7 +51,7 @@ class opt_parameters:
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
                                 'j_pm' : +1., 'j_zz' : 1., \
-                                'j2': 0.0, \
+                                'j2': j2, \
                                 'BC' : self.BC, \
                                 'symmetries' : [s[0] for s in self.symmetries], \
                                 'sectors' : self.sectors, \

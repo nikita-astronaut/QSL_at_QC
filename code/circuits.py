@@ -1,5 +1,6 @@
 import numpy as np
 from copy import deepcopy
+import os
 import scipy as sp
 from scipy import sparse
 import lattice_symmetries as ls
@@ -194,12 +195,12 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
 
 
 class SU2_PBC_symmetrized(Circuit):
-    def __init__(self, Lx, Ly, basis, spin=0):
+    def __init__(self, Lx, Ly, basis, config, spin=0):
         self.Lx = Lx
         self.Ly = Ly
         self.n_qubits = Lx * Ly
         self.spin = spin
-        super().__init__(Lx * Ly, basis)
+        super().__init__(Lx * Ly, basis, config)
         #self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
         #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
         #self.Cx = utils.get_Cx_symmetry_map(self.Lx, self.Ly)
@@ -690,9 +691,7 @@ class SU2_PBC_symmetrized(Circuit):
         try:
             parameters_log = open(os.path.join(self.config.path_to_logs, 'parameters_log.dat'), 'r') 
             last_line = parameters_log.readlines()[-1]
-            print('last line: ', last_line)
             arr = 'np.array([' + last_line + '])'
-            print(arr)
             return eval(arr)
         except:
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
