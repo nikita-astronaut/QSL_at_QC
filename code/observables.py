@@ -83,7 +83,7 @@ class Observables(object):
 
 
         ### prepare main log ###
-        string = 'gsenergy energy fidelity '
+        string = 'gsenergy energy fidelity norm '
         for _, name in self.observables:
             string += name + ' '
         self.main_log.write(string + '\n')
@@ -145,15 +145,27 @@ class Observables(object):
 
 
         obs_vals = []
+        obs_vals_ed = []
         for operator, _ in self.observables:
             val = np.dot(state_proj.conj(), operator(operator(state_proj)))
+            val_ed = np.dot(self.hamiltonian.ground_state[0].conj(), operator(operator(self.hamiltonian.ground_state[0])))
             assert np.isclose(val.imag, 0.0)
+            assert np.isclose(val_ed.imag, 0.0)
             obs_vals.append(val.real)
+            obs_vals_ed.append(val_ed.real)
         
         #### dimer amendment ###
         dimer_avg = np.dot(state_proj.conj(), self.observables[-1][0](state_proj))
         assert np.isclose(dimer_avg.imag, 0.0)
         obs_vals[-1] -= (dimer_avg ** 2).real
 
-        self.main_log.write(('{:.7f} {:.7f} {:.7f} ' + '{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, *obs_vals))
+        dimer_avg = np.dot(self.hamiltonian.ground_state[0].conj(), self.observables[-1][0](self.hamiltonian.ground_state[0]))
+        assert np.isclose(dimer_avg.imag, 0.0)
+        obs_vals_ed[-1] -= (dimer_avg ** 2).real
+
+        data = [j for i in zip(obs_vals, obs_vals_ed) for j in i]
+
+        self.main_log.write(('{:.7f} {:.7f} {:.7f} {:.7f} ' + '{:.7f}/{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, norm.real, *data))
+        print(('{:.7f} {:.7f} {:.7f} {:.7f} ' + '{:.7f}/{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, norm.real, *data))
         self.main_log.flush()
+        #exit(-1)

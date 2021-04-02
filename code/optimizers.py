@@ -157,7 +157,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
                 continue
             MTe_inv += (1. / s[lambda_idx]) * \
                       np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
-        assert np.allclose(MTe_inv, np.linalg.inv(MT_exact))
+        #assert np.allclose(MTe_inv, np.linalg.inv(MT_exact))
 
         circuit.forces_exact = grads_exact.copy()
         grads_exact = MTe_inv.dot(grads_exact)

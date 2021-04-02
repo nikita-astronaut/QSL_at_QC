@@ -24,10 +24,15 @@ s0_sparse = sp.sparse.csr_matrix(s0)
 SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 P_ij = (SS + np.eye(4)) / 2.
 
+SSun = -np.kron(sx, sx) + -np.kron(sy, sy) + np.kron(sz, sz)
+P_ijun = (SSun + np.eye(4)) / 2.
+
+
 class Hamiltonian(object):
-    def __init__(self, basis, n_qubits, su2, symmetries, sectors, spin, **kwargs):
+    def __init__(self, basis, unitary, n_qubits, su2, symmetries, sectors, spin, **kwargs):
         self.n_qubits = n_qubits
         #self.basis = basis
+        self.unitary = unitary
         self.symmetries = symmetries
         self.sectors = sectors
         self.spin = spin
@@ -41,7 +46,7 @@ class Hamiltonian(object):
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
         energy, ground_state = ls.diagonalize(self._matrix, k = 6, dtype=np.float64)
-
+        print(energy)
         ### DEBUG
         '''       
         print(energy - self.energy_renorm)
@@ -144,30 +149,54 @@ class HeisenbergSquare(Hamiltonian):
 
         operator = P_ij
         operator_j2 = P_ij
+        operatorun = P_ijun
+        operator_j2un = P_ijun
+
         n_sites = Lx * Ly
 
         bonds = []
         bonds_j2 = []
+        bondsun = []
+        bonds_j2un = []
+
         for site in range(n_sites):
             x, y = site % Lx, site // Lx
 
             site_up = ((x + 1) % Lx) + y * Lx
             site_right = x + ((y + 1) % Ly) * Lx
+
             if x + 1 < Lx or BC == 'PBC':
-                bonds.append((site, site_up))
+                if self.unitary[site, site_up] == +1:
+                    bonds.append((site, site_up))
+                else:
+                    bondsun.append((site, site_up))
             if y + 1 < Ly or BC == 'PBC':
-                bonds.append((site, site_right))
+                if self.unitary[site, site_right] == +1:
+                    bonds.append((site, site_right))
+                else:
+                    bondsun.append((site, site_right))
 
 
             site_up = ((x + 1) % Lx) + ((y + 1) % Ly) * Lx
             site_right = ((x + 1) % Lx) + ((y - 1) % Ly) * Lx
             if (x + 1 < Lx and y + 1 < Ly) or BC == 'PBC':
-                bonds_j2.append((site, site_up))
+                if self.unitary[site, site_up] == +1:
+                    bonds_j2.append((site, site_up))
+                else:
+                    bonds_j2un.append((site, site_up))
             if (x + 1 < Lx and y - 1 >= 0) or BC == 'PBC':
-                bonds_j2.append((site, site_right))
+                if self.unitary[site, site_right] == +1:
+                    bonds_j2.append((site, site_right))
+                else:
+                    bonds_j2un.append((site, site_right))
 
-        self.energy_renorm = len(bonds) + len(bonds_j2) * j2
-        return ls.Operator(self.basis, [ls.Interaction(operator * 2, bonds), ls.Interaction(j2 * operator_j2 * 2, bonds_j2)]),\
-               [[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 2] for bond in bonds] + \
-               [[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2], \
-               bonds + bonds_j2
+        self.energy_renorm = len(bonds) + len(bondsun) + len(bonds_j2) * j2 + len(bonds_j2un) * j2
+        return ls.Operator(self.basis, ([ls.Interaction(operator * 2, bonds)] if len(bonds) > 0 else []) + \
+                                       ([ls.Interaction(j2 * operator_j2 * 2, bonds_j2)] if len(bonds_j2) > 0 else []) + \
+                                       ([ls.Interaction(operatorun * 2, bondsun)] if len(bondsun) > 0 else []) + \
+                                       ([ls.Interaction(j2 * operator_j2un * 2, bonds_j2un)] if len(bonds_j2un) > 0 else [])), \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 2] for bond in bonds] if len(bonds) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2] if len(bonds_j2) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operatorun, [bond])]), 2] for bond in bondsun] if len(bondsun) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
+               bonds + bondsun + bonds_j2 + bonds_j2un
