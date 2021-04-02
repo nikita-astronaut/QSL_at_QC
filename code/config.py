@@ -11,18 +11,17 @@ import sys
 import os
 
 ### setting the MPI up ###
-#from mpi4py import MPI
-#comm = MPI.COMM_WORLD
-#rank = comm.Get_rank()
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
 
 
 
 class opt_parameters:
     def __init__(self):
-        #j2 = 0.1 * rank
-        j2 = 0.
+        j2 = 0.1 * rank
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(j2)
+        self.path_to_logs = '/users/nastrakh/QSL_at_QC/logs/j2_scan_PBC_S1_11/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
 
