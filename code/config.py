@@ -29,19 +29,36 @@ class opt_parameters:
         self.Lx, self.Ly = 4, 4
         self.su2 = True
         self.BC = 'PBC'
-        self.spin = 1
+        self.spin = 0
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
         
 
         ### setting up symmetries ###
         self.symmetries = [
-            utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+            #utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+            
         ]
-        self.eigenvalues = [-1, -1]
-        self.sectors = [2, 2]  # in Toms notation
-        self.degrees = [4, 4]
+        self.eigenvalues = [1, 1]
+        self.sectors = [0, 0]  # in Toms notation
+        self.degrees = [4, 2]
+
+        self.unitary_no = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
+        self.unitary_neel = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
+        self.unitary_stripe = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
+
+        self.unitary = self.unitary_no#neel#stripe
+
+        for i in range(self.Lx * self.Ly):
+            for j in range(self.Lx * self.Ly):
+                if (i // self.Lx) % 2 != (j // self.Lx) % 2:
+                    self.unitary_stripe[i, j] = -1
+                if (i % self.Lx + i // self.Lx) % 2 != (j % self.Lx + j // self.Lx) % 2:
+                    self.unitary_neel[i, j] = -1
 
 
         self.hamiltonian = hamiltonians.HeisenbergSquare;
@@ -54,11 +71,18 @@ class opt_parameters:
                                 'BC' : self.BC, \
                                 'symmetries' : [s[0] for s in self.symmetries], \
                                 'sectors' : self.sectors, \
-                                'spin' : self.spin
+                                'spin' : self.spin, \
+                                'unitary' : self.unitary
                                 }
 
-        self.circuit = circuits.SU2_OBC_symmetrized if self.BC == 'OBC' else circuits.SU2_PBC_symmetrized
-        self.circuit_params_dict = {'Lx' : self.Lx, 'Ly' : self.Ly, 'spin' : self.spin, 'basis' : self.basis, 'config' : self}
+        self.circuit = circuits.SU2_symmetrized
+        self.circuit_params_dict = {'Lx' : self.Lx, \
+                                    'Ly' : self.Ly, \
+                                    'spin' : self.spin, \
+                                    'basis' : self.basis, \
+                                    'config' : self, \
+                                    'unitary' : self.unitary, \
+                                    'BC' : self.BC}
         
 
         self.projector = projector.ProjectorFull
@@ -85,8 +109,8 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 10
-        self.SR_eig_cut = 1e-2
-        self.SR_diag_reg = 1e-2
+        self.N_samples = 2 ** 12
+        self.SR_eig_cut = 3e-2#1e-2
+        self.SR_diag_reg = 3e-2#1e-2
 
         return
