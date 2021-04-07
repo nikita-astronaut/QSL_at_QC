@@ -645,7 +645,7 @@ class SU2_symmetrized(Circuit):
         for n_layers in range(1):
             
             for shift in [(0, 0), (0, 1), (1, 0), (1, 1)]:
-                for pair in [(0, 15), (1, 14), (2, 13), (3, 12), (4, 9), (5, 8), (6, 11), (7, 10)]:
+                for pair in [(0, 12), (1, 5), (2, 6), (3, 15), (4, 7), (8, 11), (9, 13), (10, 14)]:
                     i, j = pair
                     xi, yi = i % self.Lx, i // self.Ly
                     xj, yj = j % self.Lx, j // self.Ly
@@ -658,7 +658,8 @@ class SU2_symmetrized(Circuit):
 
                     layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
                     layers.append(deepcopy(layer))
-                for pair in [(0, 12), (1, 5), (2, 6), (3, 15), (4, 7), (8, 11), (9, 13), (10, 14)]:
+
+                for pair in [(0, 15), (1, 14), (2, 13), (3, 12), (4, 9), (5, 8), (6, 11), (7, 10)]:
                     i, j = pair
                     xi, yi = i % self.Lx, i // self.Ly
                     xj, yj = j % self.Lx, j // self.Ly
