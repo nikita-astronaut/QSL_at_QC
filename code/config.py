@@ -22,7 +22,7 @@ class opt_parameters:
         #j2 = 0.1 * rank
         j2 = float(sys.argv[2])
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1/{:.3f}/'.format(j2)
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1sample/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
 
@@ -111,7 +111,7 @@ class opt_parameters:
 
         #### stochastic parameters ####
         self.N_samples = 2 ** 12
-        self.SR_eig_cut = 3e-2#1e-2
-        self.SR_diag_reg = 3e-2#1e-2
+        self.SR_eig_cut = 1e-2#1e-2
+        self.SR_diag_reg = 1e-2#1e-2
 
         return
