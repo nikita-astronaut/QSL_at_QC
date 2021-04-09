@@ -30,6 +30,7 @@ class Circuit(object):
         self.n_qubits = n_qubits
         self.unitary = unitary
         self.unitary_site = unitary[0, :]
+        self.dimerization = config.dimerization
 
         self.basis_bare = ls.SpinBasis(ls.Group([]), number_spins=n_qubits, hamming_weight=None)
         self.basis_bare.build()
@@ -204,6 +205,7 @@ class SU2_symmetrized(Circuit):
         self.Ly = Ly
         self.n_qubits = Lx * Ly
         self.spin = spin
+        self.dimerization = config.dimerization
         super().__init__(Lx * Ly, basis, config, unitary)
         #self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
         #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
@@ -557,7 +559,7 @@ class SU2_symmetrized(Circuit):
         
         if self.spin == 0:
             #for i in np.arange(self.Lx * self.Ly)[::2]:
-            for pair in [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)]:
+            for pair in self.dimerization:
             #for pair in [(5, 10), (9, 6), (1, 4), (2, 7), (8, 13), (11, 14), (0, 15), (3, 12)]:
             #for pair in [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
                 op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
@@ -645,8 +647,7 @@ class SU2_symmetrized(Circuit):
         for n_layers in range(1):
             
             for shift in [(0, 0), (0, 1), (1, 0), (1, 1)]:
-               
-                for pair in [(0, 15), (1, 14), (2, 13), (3, 12), (4, 9), (5, 8), (6, 11), (7, 10)]:
+                for pair in [(0, 12), (1, 5), (2, 6), (3, 15), (4, 7), (8, 11), (9, 13), (10, 14)]:
                     i, j = pair
                     xi, yi = i % self.Lx, i // self.Ly
                     xj, yj = j % self.Lx, j // self.Ly
@@ -659,7 +660,8 @@ class SU2_symmetrized(Circuit):
 
                     layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
                     layers.append(deepcopy(layer))
-                for pair in [(0, 12), (1, 5), (2, 6), (3, 15), (4, 7), (8, 11), (9, 13), (10, 14)]:
+
+                for pair in [(0, 15), (1, 14), (2, 13), (3, 12), (4, 9), (5, 8), (6, 11), (7, 10)]:
                     i, j = pair
                     xi, yi = i % self.Lx, i // self.Ly
                     xj, yj = j % self.Lx, j // self.Ly
@@ -790,6 +792,10 @@ class SU2_symmetrized(Circuit):
     def _initialize_parameters(self):
         if self.config.mode == 'random':
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.03
+
+        if self.config.mode == 'preassigned':
+            return self.config.start_params
+
         try:
             parameters_log = open(os.path.join(self.config.path_to_logs, 'parameters_log.dat'), 'r') 
             last_line = parameters_log.readlines()[-1]
