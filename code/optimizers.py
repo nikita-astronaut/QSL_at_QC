@@ -120,7 +120,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         if config.N_samples is not None:
             MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
             MT += config.SR_diag_reg * np.diag(np.diag(MT))
-            assert np.allclose(MT, MT.T)
+            #assert np.allclose(MT, MT.T)
 
 
             s, u = np.linalg.eigh(MT)
@@ -142,7 +142,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
         MT_exact += np.eye(MT_exact.shape[0]) * 1e-4
 
-        assert np.allclose(MT_exact, MT_exact.T)
+        #assert np.allclose(MT_exact, MT_exact.T)
 
         s, u = np.linalg.eigh(MT_exact)
         #print('s exact:', s)
