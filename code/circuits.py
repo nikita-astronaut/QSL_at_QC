@@ -646,8 +646,8 @@ class SU2_symmetrized(Circuit):
 
         for n_layers in range(1):
             
-            for shift in [(0, 0), (0, 1), (1, 0), (1, 1)]:
-                for pair in [(0, 12), (1, 5), (2, 6), (3, 15), (4, 7), (8, 11), (9, 13), (10, 14)]:
+            for shid, shift in enumerate([(0, 0), (1, 1), (1, 0), (0, 1)]):
+                for pair in [(0, 4), (1, 5), (2, 6), (3, 7), (8, 12), (9, 13), (10, 14), (11, 15)] if shid < 2 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
                     i, j = pair
                     xi, yi = i % self.Lx, i // self.Ly
                     xj, yj = j % self.Lx, j // self.Ly
@@ -692,54 +692,8 @@ class SU2_symmetrized(Circuit):
                     layers.append(deepcopy(layer))
         
             return layers
-            ''' 
-            '''
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 0:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-                if (y + 1 < self.Ly and x + 1 < self.Lx) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 0:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-                if (x + 1 < self.Lx and y > 0) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 1:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-                if (y + 1 < self.Ly and x + 1 < self.Lx) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 1:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-                if (x + 1 < self.Lx and y > 0) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
             
 
-            
             for i in range(self.Lx * self.Ly):
                 layer = []
                 x, y = i % self.Lx, i // self.Ly
@@ -761,6 +715,7 @@ class SU2_symmetrized(Circuit):
                 if (y + 1 < self.Ly) or self.BC == 'PBC':
                     layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
                     layers.append(deepcopy(layer))
+
 
             for i in range(self.Lx * self.Ly):
                 layer = []
@@ -784,6 +739,50 @@ class SU2_symmetrized(Circuit):
                     layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
                     layers.append(deepcopy(layer))
 
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 0:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
+                if (x + 1 < self.Lx and y + 1 < self.Ly) or self.BC == 'PBC':
+                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 1:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
+                if (y + 1 < self.Ly and x + 1 < self.Lx) or self.BC == 'PBC':
+                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 1:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
+                if (y > 0 and x + 1 < self.Lx) or self.BC == 'PBC':
+                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
+                    layers.append(deepcopy(layer))
+
+            for i in range(self.Lx * self.Ly):
+                layer = []
+                x, y = i % self.Lx, i // self.Ly
+
+                if y % 2 == 0:
+                    continue
+                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
+                if (x + 1 < self.Lx and y > 0) or self.BC == 'PBC':
+                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
+                    layers.append(deepcopy(layer))
+            
         return layers
         
 
