@@ -68,10 +68,29 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         #print('connectivity exact', der_one_exact)
         #print('connectivity sampled', der_one)
 
+
+        #print('connectivities')
+        #for conexact, consampl in zip(der_one_exact, der_one):
+        #    print(conexact, consampl)
+
+        #np.save('conn_exact.npy', der_one_exact)
+        #np.save('conn_sampl.npy', der_one)
+
+        #print('grads')
+        #for conexact, consampl in zip(grads_exact, grads):
+        #    print(conexact, consampl)
+
+        #np.save('grads_exact.npy', grads_exact)
+        #np.save('grads_sampl.npy', grads)
+
+
         #for i in range(ij.shape[0]):
         #    for j in range(ij.shape[1]):
         #        print(i, j, ij_exact[i, j], ij[i, j])
-        #exit(-1)
+
+        #np.save('MT_exact.npy', ij_exact)
+        #np.save('MT_sampl.npy', ij)
+
         #print('ij discrepancy:',  np.linalg.norm(ij - ij_exact) / np.linalg.norm(ij_exact))
         if config.N_samples is not None:
             MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
@@ -140,7 +159,6 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
 
         MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
         MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
-        MT_exact += np.eye(MT_exact.shape[0]) * 1e-4
 
         #assert np.allclose(MT_exact, MT_exact.T)
 
@@ -149,7 +167,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         #print('u exact:', u.T)
 
         MTe_inv = np.zeros(MT_exact.shape)
-        keep_lambdas = (s / s.max()) > config.SR_eig_cut - 1e-6
+        keep_lambdas = (s / s.max()) > config.SR_eig_cut
         #print(keep_lambdas)
         #print(u)
         for lambda_idx in range(len(s)):
@@ -166,7 +184,18 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         #    print('flipped')
         #    grads = 3 * grads / np.sqrt(np.sum(grads ** 2))
 
+        
+        #print('grads SR')
+        #for conexact, consampl in zip(grads_exact, grads):
+        #    print(conexact, consampl)
 
+        #np.save('gradsSR_exact.npy', grads_exact)
+        #np.save('gradsSR_sampl.npy', grads)
+
+        #np.save('MT_inv_exact.npy', MTe_inv)
+        #np.save('MT_inv_sampl.npy', MT_inv)
+
+        #exit(-1)
         if config.N_samples is not None:
             new_params = (cur_params - lr * grads).real
         else:

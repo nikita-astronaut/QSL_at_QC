@@ -48,8 +48,9 @@ class Hamiltonian(object):
         energy, ground_state = ls.diagonalize(self._matrix, k = 6, dtype=np.float64)
         print(energy)
         ### DEBUG
-        '''       
+        
         print(energy - self.energy_renorm)
+        spins = []
         all_bonds = []
         for i in range(self.n_qubits):
             for j in range(self.n_qubits):
@@ -58,14 +59,17 @@ class Hamiltonian(object):
         total_spin = ls.Operator(self.basis, [ls.Interaction(SS, all_bonds)])        
         for s in ground_state.T:
             print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
+            spins.append(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
 
-        exit(-1)
-        '''
         ### END DEBUG
+        for idx, s in enumerate(spins):
+            if np.isclose(s / 4, self.spin * (self.spin + 1)):
+                break
+        print('idx = ', idx)
 
         ### rewrite ground state in terms of non-symmetrized basis ###
         gs_nonsymm = np.zeros(basis.number_states, dtype=np.complex128)
-        gs_symm = ground_state[:, 0]
+        gs_symm = ground_state[:, idx]  # FIXME
         for i in range(basis.number_states):
             nonsymm_state = basis.states[i]
             rep, character, norm = self.basis.state_info(nonsymm_state)
@@ -80,7 +84,7 @@ class Hamiltonian(object):
         self.basis = basis
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)   
 
-        assert np.isclose(np.dot(self._matrix(gs_nonsymm).conj(), gs_nonsymm), energy[0])
+        assert np.isclose(np.dot(self._matrix(gs_nonsymm).conj(), gs_nonsymm), energy[idx])
 
         #self.ground_state = ground_state.T
         self.nterms = len(self._terms)
