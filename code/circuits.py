@@ -266,7 +266,6 @@ class SU2_symmetrized(Circuit):
         state = self.__call__()
         state_proj = projector(state)
         norm = np.dot(state.conj(), state_proj)
-        print('norm = ', norm)
 
         energy = np.dot(np.conj(state), hamiltonian(state_proj) / norm)
 
@@ -565,11 +564,11 @@ class SU2_symmetrized(Circuit):
                 op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
                 state = op(state)
         elif self.spin == 1:
-            for i in np.arange(self.Lx * self.Ly)[::2]:
-                if i != 4:
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [(i, i + 1)])])
+            for idx, pair in enumerate(self.dimerization):
+                if idx != 4:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
                 else:
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(tripletizer, [(i, i + 1)])])
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(tripletizer, [pair])])
                 state = op(state)
         else:
             for pair in [(0, 1), (2, 3), (4, 8), (7, 11), (12, 13), (14, 15)]:
