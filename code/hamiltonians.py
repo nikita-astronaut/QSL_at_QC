@@ -29,11 +29,12 @@ P_ijun = (SSun + np.eye(4)) / 2.
 
 
 class Hamiltonian(object):
-    def __init__(self, basis, unitary, n_qubits, su2, symmetries, sectors, spin, **kwargs):
+    def __init__(self, basis, unitary, n_qubits, su2, symmetries, permutations, sectors, spin, **kwargs):
         self.n_qubits = n_qubits
         #self.basis = basis
         self.unitary = unitary
         self.symmetries = symmetries
+        self.permutations = permutations
         self.sectors = sectors
         self.spin = spin
    
@@ -45,8 +46,12 @@ class Hamiltonian(object):
 
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 6, dtype=np.float64)
+        energy, ground_state = ls.diagonalize(self._matrix, k = 4, dtype=np.float64)
         print(energy)
+        for idx, state in enumerate(ground_state.T):
+            print('state', idx)
+            for s in self.permutations:
+                print(np.dot(state.conj(), state[s]))
         ### DEBUG
         
         print(energy - self.energy_renorm)
@@ -60,7 +65,7 @@ class Hamiltonian(object):
         for s in ground_state.T:
             print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
             spins.append(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
-
+        
         ### END DEBUG
         for idx, s in enumerate(spins):
             if np.isclose(s / 4, self.spin * (self.spin + 1)):
@@ -77,8 +82,6 @@ class Hamiltonian(object):
                 gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
         self.ground_state = gs_nonsymm[np.newaxis, :]
         assert np.isclose(np.dot(gs_nonsymm.conj(), gs_nonsymm), 1.0)
-
-        
 
         ### finally obtaining the GS in the nonsymmetric basis (provided from config) ###
         self.basis = basis
@@ -204,3 +207,27 @@ class HeisenbergSquare(Hamiltonian):
                ([[ls.Operator(self.basis, [ls.Interaction(operatorun, [bond])]), 2] for bond in bondsun] if len(bondsun) > 0 else []) + \
                ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
                bonds + bondsun + bonds_j2 + bonds_j2un
+
+
+class HeisenbergHexagon(Hamiltonian):
+    def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0., BC='PBC'):
+        operator = P_ij
+        operator_j2 = P_ij
+        n_sites = 6
+
+        bonds = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 5)]
+        bonds_j2 = [(0, 2), (2, 4), (4, 0), (1, 3), (3, 5), (1, 5)]
+        bondsun = []
+        bonds_j2un = []
+
+        self.energy_renorm = len(bonds) + len(bondsun) + len(bonds_j2) * j2 + len(bonds_j2un) * j2
+        return ls.Operator(self.basis, ([ls.Interaction(operator * 2, bonds)] if len(bonds) > 0 else []) + \
+                                       ([ls.Interaction(j2 * operator_j2 * 2, bonds_j2)] if len(bonds_j2) > 0 else []) + \
+                                       ([ls.Interaction(operatorun * 2, bondsun)] if len(bondsun) > 0 else []) + \
+                                       ([ls.Interaction(j2 * operator_j2un * 2, bonds_j2un)] if len(bonds_j2un) > 0 else [])), \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 2] for bond in bonds] if len(bonds) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2] if len(bonds_j2) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operatorun, [bond])]), 2] for bond in bondsun] if len(bondsun) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
+               bonds + bondsun + bonds_j2 + bonds_j2un
+

@@ -229,9 +229,23 @@ class SU2_symmetrized(Circuit):
                                                   ([ls.Interaction(SSun, all_bondsun)] if len(all_bondsun) > 0 else []))
 
 
+        self.singletizer = np.zeros((4, 4), dtype=np.complex128)
+        self.singletizer[1, 0] = 1. / np.sqrt(2)
+        self.singletizer[2, 0] = -1. / np.sqrt(2)
+        self.singletizer = self.singletizer + self.singletizer.T
+
+        self.tripletizer = np.zeros((4, 4), dtype=np.complex128)
+        self.tripletizer[3, 0] = 1.
+        self.tripletizer = self.tripletizer + self.tripletizer.T
+
+        self.octupletizer = np.zeros((16, 16), dtype=np.complex128)
+        self.octupletizer[15, 0] = 1.
+
+        self.octupletizer = self.octupletizer + self.octupletizer.T
+
+
         self.ini_state = None
         self.ini_state = self._initial_state()
-
 
         self.pairwise_distances = self.get_pairwise_distances()
 
@@ -479,102 +493,25 @@ class SU2_symmetrized(Circuit):
         if self.ini_state is not None:
             return self.ini_state.copy()
 
-        '''
-        state1 = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state2 = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        
-        spin_1 = np.zeros(self.n_qubits, dtype=np.int64)
-        spin_2 = np.zeros(self.n_qubits, dtype=np.int64)
-        spin_3 = np.zeros(self.n_qubits, dtype=np.int64)
-        spin_4 = np.zeros(self.n_qubits, dtype=np.int64)
-        for i in range(self.n_qubits):
-            x, y = i % self.Lx, i // self.Lx
-            if x % 2 == 0:
-                spin_1[i] = 1.
-            else:
-                spin_2[i] = 1.
-
-            if y % 2 == 0:
-                spin_3[i] = 1.
-            else:
-                spin_4[i] = 1.
-
-        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state[utils.spin_to_index(spin_1, number_spins = self.n_qubits)] = 1. / 2
-        state[utils.spin_to_index(spin_2, number_spins = self.n_qubits)] = 1. / 2#np.sqrt(2)
-        state[utils.spin_to_index(spin_3, number_spins = self.n_qubits)] = 1. / 2
-        state[utils.spin_to_index(spin_4, number_spins = self.n_qubits)] = 1. / 2
-
-        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
-        for i in range(self.basis.number_states):
-            x = self.basis.states[i]
-            _, _, norm = self.basis.state_info(x)
-            state_su2[i] = state[self.basis_bare.index(x)] / norm
-            #print(state[self.basis_bare.index(x)] / norm)
-
-        #print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
-        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
-
-        
-
-        return state_su2
-        
-
-        
-        state1[0] = 1.
-        state2[0] = 1.
-        ''' 
-        #hadamard = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
-        #for i in np.arange(self.Lx * self.Ly):
-        #    op = ls.Operator(self.basis, [ls.Interaction(hadamard, [(i,)])])
-        #    state = op(state)
-        
-
         state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
         state[0] = 1.
-
-        singletizer = np.zeros((4, 4), dtype=np.complex128)
-        singletizer[1, 0] = 1. / np.sqrt(2)
-        singletizer[2, 0] = -1. / np.sqrt(2)
-        singletizer = singletizer + singletizer.T
-
-        tripletizer = np.zeros((4, 4), dtype=np.complex128)
-        #tripletizer[1, 0] = +1. / np.sqrt(2)
-        #tripletizer[2, 0] = +1. / np.sqrt(2)
-        tripletizer[3, 0] = 1.
-        tripletizer = tripletizer + tripletizer.T
-
-        octupletizer = np.zeros((16, 16), dtype=np.complex128)
-        #octupletizer[12, 0] = +1. / np.sqrt(6)
-        #octupletizer[9, 0] = +1. / np.sqrt(6)
-        #octupletizer[3, 0] = +1. / np.sqrt(6)
-        #octupletizer[6, 0] = +1. / np.sqrt(6)
-        #octupletizer[10, 0] = +1. / np.sqrt(6)
-        #octupletizer[5, 0] = +1. / np.sqrt(6)
-        octupletizer[15, 0] = 1.
-
-        octupletizer = octupletizer + octupletizer.T
-
-        
+       
         if self.spin == 0:
-            #for i in np.arange(self.Lx * self.Ly)[::2]:
             for pair in self.dimerization:
-            #for pair in [(5, 10), (9, 6), (1, 4), (2, 7), (8, 13), (11, 14), (0, 15), (3, 12)]:
-            #for pair in [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
-                op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 state = op(state)
         elif self.spin == 1:
             for idx, pair in enumerate(self.dimerization):
                 if idx != 4:
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 else:
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(tripletizer, [pair])])
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.tripletizer, [pair])])
                 state = op(state)
         else:
             for pair in [(0, 1), (2, 3), (4, 8), (7, 11), (12, 13), (14, 15)]:
-                op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 state = op(state)
-            op = ls.Operator(self.basis_bare, [ls.Interaction(octupletizer, [(5, 6, 9, 10)])])
+            op = ls.Operator(self.basis_bare, [ls.Interaction(self.octupletizer, [(5, 6, 9, 10)])])
             state = op(state)
 
         assert np.isclose(np.dot(state.conj(), state), 1.0)
@@ -585,26 +522,14 @@ class SU2_symmetrized(Circuit):
             if phase == -1:
                 state = op(state)
 
-
-
         state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
         for i in range(self.basis.number_states):
             x = self.basis.states[i]
             _, _, norm = self.basis.state_info(x)
             state_su2[i] = state[self.basis_bare.index(x)] / norm
-            #print(state[self.basis_bare.index(x)] / norm)
 
-        #print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
         assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
-
-        if self.spin == 0.0:
-            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 0.0)
-        elif self.spin == 1.0:
-            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 2.0 * 4.)
-        else:
-            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 6.0 * 4.)
-
-
+        assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, self.spin * (self.spin + 1) * 4.)
         
         return state_su2
 
@@ -788,7 +713,7 @@ class SU2_symmetrized(Circuit):
 
 
     def _initialize_parameters(self):
-        if self.config.mode == 'random':
+        if self.config.mode == 'fresh':
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.03
 
         if self.config.mode == 'preassigned':
@@ -833,6 +758,72 @@ class SU2_symmetrized(Circuit):
             self.unitaries.append(unitaries_layer)
             self.unitaries_herm.append(unitaries_herm_layer)
             self.derivatives.append(derivatives_layer)
+        return
+
+
+class SU2_symmetrized_hexagon(SU2_symmetrized):
+    def __init__(self, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(6, 1, basis, config, unitary, BC, spin)
+        self.n_qubits = 6
 
         return
 
+
+    def _initial_state(self):
+        if self.ini_state is not None:
+            return self.ini_state.copy()
+
+        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
+        state[0] = 1.
+
+        if self.spin == 0:
+            for pair in self.dimerization:
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                state = op(state)
+        elif self.spin == 1:
+            for idx, pair in enumerate(self.dimerization):
+                if idx != 0:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                else:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.tripletizer, [pair])])
+                state = op(state)
+        else:
+            for pair in [(0, 1)]:
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                state = op(state)
+            op = ls.Operator(self.basis_bare, [ls.Interaction(self.octupletizer, [(2, 3, 4, 5)])])
+            state = op(state)
+
+        assert np.isclose(np.dot(state.conj(), state), 1.0)
+
+        ### perform the unitary transform ###
+        for site, phase in enumerate(self.unitary_site):
+            op = ls.Operator(self.basis_bare, [ls.Interaction(sz, [(site,)])])
+            if phase == -1:
+                state = op(state)
+
+        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
+        for i in range(self.basis.number_states):
+            x = self.basis.states[i]
+            _, _, norm = self.basis.state_info(x)
+            state_su2[i] = state[self.basis_bare.index(x)] / norm
+
+        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
+        assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, self.spin * (self.spin + 1) * 4.)
+
+        return state_su2
+
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+
+        for n_layers in range(1):
+            for pattern in [[(0, 1), (2, 3), (4, 5)], [(1, 2), (3, 4), (0, 5)], [(1, 3), (0, 4)], [(2, 4), (3, 5)], [(0, 4), (1, 3)]]:                
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+        return layers

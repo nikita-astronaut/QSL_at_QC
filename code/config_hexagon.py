@@ -23,45 +23,31 @@ class opt_parameters:
         ### preparing the logging ###
         self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/hexagon/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
-        self.mode = 'continue'
+        self.mode = 'fresh'
+        self.Lx, self.Ly = None, None
 
         ### setting up geometry and parameters ###
-        self.Lx, self.Ly = 4, 4
         self.su2 = True
         self.BC = 'PBC'
         self.spin = 0
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=6, hamming_weight=3 + self.spin if self.su2 else None)
         self.basis.build()
         
         ### setting up symmetries ###
         self.symmetries = [
-            utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            #utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
-            
+            utils.get_hexagon_rot_symmetry_map(basis=self.basis, su2=self.su2), \
+            utils.get_hexagon_mir_symmetry_map(basis=self.basis, su2=self.su2), \
         ]
-        self.eigenvalues = [1, -1]
-        self.sectors = [0, 2]  # in Toms notation
-        self.degrees = [4, 4]
+        self.eigenvalues = []#[-1, 1]
+        self.sectors = []#[3, 0]  # in Toms notation
+        self.degrees = []#[6, 2]
 
-        self.unitary_no = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
-        self.unitary_neel = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
-        self.unitary_stripe = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
+        self.unitary_no = np.ones((6, 6))
 
-        self.unitary = self.unitary_no#neel#stripe
+        self.unitary = self.unitary_no
 
-        for i in range(self.Lx * self.Ly):
-            for j in range(self.Lx * self.Ly):
-                if (i // self.Lx) % 2 != (j // self.Lx) % 2:
-                    self.unitary_stripe[i, j] = -1
-                if (i % self.Lx + i // self.Lx) % 2 != (j % self.Lx + j // self.Lx) % 2:
-                    self.unitary_neel[i, j] = -1
-
-
-        self.hamiltonian = hamiltonians.HeisenbergSquare;
-        self.ham_params_dict = {'n_qubits' : self.Lx * self.Ly, \
+        self.hamiltonian = hamiltonians.HeisenbergHexagon;
+        self.ham_params_dict = {'n_qubits' : 6, \
                                 'su2' : self.su2, \
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
@@ -69,14 +55,15 @@ class opt_parameters:
                                 'j2': j2, \
                                 'BC' : self.BC, \
                                 'symmetries' : [s[0] for s in self.symmetries], \
+                                'permutations' : [s[1] for s in self.symmetries], \
                                 'sectors' : self.sectors, \
                                 'spin' : self.spin, \
                                 'unitary' : self.unitary
                                 }
 
 
-        self.dimerization = [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)] # if j2 > 0.6 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
-        self.circuit = circuits.SU2_symmetrized
+        self.dimerization = [(1, 2), (3, 4), (0, 5)]
+        self.circuit = circuits.SU2_symmetrized_hexagon
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'spin' : self.spin, \
@@ -88,16 +75,15 @@ class opt_parameters:
 
         self.projector = projector.ProjectorFull
 
-        self.proj_params_dict = {'n_qubits' : self.Lx * self.Ly, \
+        self.proj_params_dict = {'n_qubits' : 6, \
                                  'su2' : self.su2, \
                                  'basis' : self.basis, \
                                  'generators' : self.symmetries, \
                                  'eigenvalues' : self.eigenvalues, \
                                  'degrees' : self.degrees}
 
-        self.observables = [observables.neel_order(self.Lx, self.Ly, self.basis, self.su2), \
-                            observables.stripe_order(self.Lx, self.Ly, self.basis, self.su2), \
-                            observables.dimer_order(self.Lx, self.Ly, self.basis, self.su2, self.BC) \
+        self.observables = [observables.neel_order_hexagon(self.basis, self.su2), \
+                            observables.plaquette_order_hexagon(self.basis, self.su2, self.BC) \
                            ]
 
 
@@ -109,7 +95,7 @@ class opt_parameters:
 
         #### stochastic parameters ####
         self.N_samples = None#2 ** 22
-        self.SR_eig_cut = 1e-3#3e-2#1e-2
-        self.SR_diag_reg = 1e-3#3e-2#1e-2
+        self.SR_eig_cut = 1e-5#1e-3#3e-2#1e-2
+        self.SR_diag_reg = 1e-5#1e-3#3e-2#1e-2
 
         return

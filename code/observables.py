@@ -30,6 +30,20 @@ def neel_order(Lx, Ly, basis, su2=False):
 
     return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel'
 
+def neel_order_hexagon(basis, su2=False):
+    n_qubits = 6
+
+    site_plus = []
+    site_minus = []
+    for i in range(n_qubits):
+        if i % 2 == 0:
+            site_plus.append(i)
+        else:
+            site_minus.append(i)
+
+    return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel_hex'
+
+
 def stripe_order(Lx, Ly, basis, su2=False):
     n_qubits = Lx * Ly
 
@@ -61,6 +75,15 @@ def dimer_order(Lx, Ly, basis, su2=False, BC='PBC'):
                     bond_minus.append(((x + y * Lx), (((x + 1) % Lx) + y * Lx)))
 
     return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Dimer'
+
+
+def plaquette_order_hexagon(basis, su2=False, BC='PBC'):
+    n_qubits = 6
+
+    bond_plus = [(0, 1), (2, 3), (4, 5)]
+    bond_minus = [(1, 2), (3, 4), (0, 5)]
+
+    return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Plaquette_hex'
 
 
 class Observables(object):

@@ -130,6 +130,26 @@ def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
     spins = spins[:, map_site]
     return map_site, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
+def get_hexagon_rot_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 6)
+
+    map_site = np.array([1, 2, 3, 4, 5, 0])
+    assert np.allclose(map_site[map_site][map_site][map_site][map_site][map_site], np.arange(6))
+  
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 6))
+
+def get_hexagon_mir_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 6)
+
+    map_site = np.array([0, 5, 4, 3, 2, 1])
+    assert np.allclose(map_site[map_site], np.arange(6))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 6))
+
 
 def compute_norm_sample(state, projector, N_samples):
     t = time()
