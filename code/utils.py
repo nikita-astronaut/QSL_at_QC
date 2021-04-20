@@ -151,6 +151,116 @@ def get_hexagon_mir_symmetry_map(basis, su2=False):
     return map_site, np.argsort(spin_to_index(spins, number_spins = 6))
 
 
+def get_honeycomb_2x2_trx_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 8)
+
+    map_site = np.array([4, 5, 6, 7, 0, 1, 2, 3])
+    assert np.allclose(map_site[map_site], np.arange(8))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 8))
+
+
+def get_honeycomb_3x3_trx_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 18)
+
+    map_site = np.array([2, 3, 4, 5, 0, 1, 8, 9, 10, 11, 6, 7, 14, 15, 16, 17, 12, 13])
+    assert np.allclose(map_site[map_site][map_site], np.arange(18))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 18))
+
+
+def get_honeycomb_2x2_try_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 8)
+
+    map_site = np.array([2, 3, 0, 1, 6, 7, 4, 5])
+    assert np.allclose(map_site[map_site], np.arange(8))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 8))
+
+
+def get_honeycomb_3x3_try_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 18)
+
+    map_site = np.array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 0, 1, 2, 3, 4, 5])
+    assert np.allclose(map_site[map_site][map_site], np.arange(18))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 18))
+
+
+
+def get_honeycomb_2x2_rot_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 8)
+
+    map_site = np.array([1, 4, 7, 2, 3, 6, 5, 0])
+    assert np.allclose(map_site[map_site][map_site][map_site][map_site][map_site], np.arange(8))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 8))
+
+
+def get_honeycomb_3x3_rot_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 18)
+
+    map_site = np.array([1, 6, 15, 2, 11, 16, 3, 8, 17, 4, 7, 12, 5, 10, 13, 0, 9, 14])
+    assert np.allclose(map_site[map_site][map_site][map_site][map_site][map_site], np.arange(18))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 18))
+
+
+def get_honeycomb_2x2_mir1_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 8)
+
+    map_site = np.array([0, 5, 6, 3, 4, 1, 2, 7])
+    assert np.allclose(map_site[map_site], np.arange(8))
+
+
+    spins = spins[:, map_site] 
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 8))
+
+
+def get_honeycomb_3x3_mir2_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 18)
+
+    map_site = np.array([0, 13, 14, 9, 10, 5, 12, 7, 8, 3, 4, 17, 6, 1, 2, 15, 16, 11])
+    assert np.allclose(map_site[map_site], np.arange(18))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 18))
+
+def get_honeycomb_3x3_mir1_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 18)
+
+    map_site = np.array([17, 16, 13, 12, 15, 14, 7, 6, 9, 8, 11, 10, 3, 2, 5, 4, 1, 0])
+    assert np.allclose(map_site[map_site], np.arange(18))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 18))
+
+
+def get_honeycomb_2x2_mir2_symmetry_map(basis, su2=False):
+    spins = index_to_spin(basis.states, number_spins = 8)
+
+    map_site = np.array([7, 2, 1, 4, 3, 6, 5, 0])
+    assert np.allclose(map_site[map_site], np.arange(8))
+
+
+    spins = spins[:, map_site]
+    return map_site, np.argsort(spin_to_index(spins, number_spins = 8))
+
+
 def compute_norm_sample(state, projector, N_samples):
     t = time()
     norms = []

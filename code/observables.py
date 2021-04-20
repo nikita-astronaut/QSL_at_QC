@@ -44,6 +44,21 @@ def neel_order_hexagon(basis, su2=False):
     return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel_hex'
 
 
+def neel_order_honeycomb(Lx, Ly, basis, su2=False):
+    n_qubits = 2 * Lx * Ly
+
+    site_plus = []
+    site_minus = []
+    for i in range(n_qubits):
+        if i % 2 == 0:
+            site_plus.append(i)
+        else:
+            site_minus.append(i)
+
+    return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel_honey'
+
+
+
 def stripe_order(Lx, Ly, basis, su2=False):
     n_qubits = Lx * Ly
 
@@ -75,6 +90,17 @@ def dimer_order(Lx, Ly, basis, su2=False, BC='PBC'):
                     bond_minus.append(((x + y * Lx), (((x + 1) % Lx) + y * Lx)))
 
     return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Dimer'
+
+
+
+def dimer_order_honeycomb(Lx, Ly, basis, su2=False, BC='PBC'):
+    n_qubits = 2 * Lx * Ly
+
+    bonds = []
+    for i in range(n_qubits // 2):
+        bonds.append((2 * i, 2 * i + 1))
+    return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bonds)]), 'dimer_honeycomb'
+
 
 
 def plaquette_order_hexagon(basis, su2=False, BC='PBC'):
