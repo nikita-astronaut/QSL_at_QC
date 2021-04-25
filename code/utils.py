@@ -264,13 +264,21 @@ def get_honeycomb_2x2_mir2_symmetry_map(basis, su2=False):
 def compute_norm_sample(state, projector, N_samples):
     t = time()
     norms = []
-    state_ancilla = np.zeros(2 * len(state), dtype=np.complex128)
-    indexes = np.arange(len(state_ancilla))
+    #state_ancilla = np.zeros(2 * len(state), dtype=np.complex128)
+    #indexes = np.arange(len(state_ancilla))
+
+
+    ps = [(0.5 - np.vdot(projector(state, proj_idx), state) / 2.).real for proj_idx in range(projector.nterms)]
+    ps = np.clip(ps, a_min=0., a_max=1.)
+    N_ups = np.random.binomial(N_samples, ps)
+    print('sample estimation of N(theta) = ', time() - t)
+    return np.sum(1 - 2 * N_ups / N_samples) / projector.nterms
 
     for proj_idx in range(projector.nterms):
         state_proj = projector(state, proj_idx)
         state_ancilla[:len(state)] = (state + state_proj) / 2.
         state_ancilla[len(state):] = (state - state_proj) / 2.
+        
 
         idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
 
@@ -320,24 +328,30 @@ def get_symmetry_unique_bonds(bonds, permutations):
 def compute_energy_sample(state, hamiltonian, projector, N_samples):
     t = time()
     energies = []
-    state_ancilla = np.zeros(2 * len(state), dtype=np.complex128)
-    indexes = np.arange(len(state_ancilla))
+    #state_ancilla = np.zeros(2 * len(state), dtype=np.complex128)
+    #indexes = np.arange(len(state_ancilla))
+
+    state0_proj_inv = [projector(state, proj_idx, inv=True) for proj_idx in range(projector.nterms)]
 
     for ham_idx in range(hamiltonian.nterms):
         state_ham, j = hamiltonian(state, ham_idx)
-        for proj_idx in range(projector.nterms):
-            state_proj = projector(state_ham, proj_idx)
-            state_ancilla[:len(state)] = (state + state_proj) / 2.
-            state_ancilla[len(state):] = (state - state_proj) / 2.
-
-            idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
-            #np.random.seed(0)
-            #idxs = np.random.randint(0, len(state_ancilla), size = N_samples)
+        ps = [(0.5 - np.vdot(state0_proj_inv[proj_idx], state_ham) / 2.).real for proj_idx in range(projector.nterms)]
+        N_ups = np.random.binomial(N_samples, ps)
+        energies.append(np.sum((1 - 2 * N_ups / N_samples) * j))
+        #for proj_idx in range(projector.nterms):
+        #    state_proj = projector(state_ham, proj_idx)
+        #    #state_ancilla[:len(state)] = (state + state_proj) / 2.
+        #    #state_ancilla[len(state):] = (state - state_proj) / 2.
+        #    p = np.linalg.norm((state - state_proj) / 2.) ** 2
+        #    N_up = np.random.binomial(N_samples, p)
+        #    #idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
+        #    #np.random.seed(0)
+        #    #idxs = np.random.randint(0, len(state_ancilla), size = N_samples)
  
-            N_up = np.sum(idxs >= len(state))
+        #    #N_up = np.sum(idxs >= len(state))
 
-            energies.append((1 - 2 * N_up / N_samples) * j)
-            #print(energies[-1])
+        #    energies.append((1 - 2 * N_up / N_samples) * j)
+        #    #print(energies[-1])
         #print('energy_projected: ', np.sum(energies[-projector.nterms:]), 'idx', ham_idx, j)
 
     print('sample estimation of E(theta) = ', time() - t)
@@ -378,51 +392,58 @@ def compute_energy_sample_symmetrized(state, hamiltonian, projector, N_samples):
     return np.sum(energies) / projector.nterms
 
 
-def compute_metric_tensor_sample(states, projector, N_samples, theta=0.):
+def compute_metric_tensor_sample(states, projector, N_samples):
     t = time()
     MT = np.zeros((len(states), len(states)), dtype=np.complex128)
-    state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
-    indexes = np.arange(len(state_ancilla))
+    #state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
+    #indexes = np.arange(len(state_ancilla))
 
+    t_proj = 0.
+    t_norm = 0.
+    t_samp = 0.
+
+    ctr = 0
+    #thetafull = np.exp(1.0j * theta * np.pi / 2.)
     for proj_idx in range(projector.nterms):
-        for i in range(len(states)):
-            for j in range(i, len(states)):
-                state_j_proj = projector(states[j], proj_idx)
-                state_ancilla[:len(state_j_proj)] = (states[i] + np.exp(1.0j * theta) * state_j_proj) / 2.
-                state_ancilla[len(state_j_proj):] = (states[i] - np.exp(1.0j * theta) * state_j_proj) / 2.
+        for j in range(len(states)):
+            z = time()
+            state_j_proj = projector(states[j], proj_idx)# * thetafull
+            t_proj += time() - z
 
-                idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
-                N_up = np.sum(idxs >= len(states[0]))
+            z = time()
+            ps = [(0.5 - np.vdot(states[i], state_j_proj) / 2.) for i in range(j, len(states))]
+            ps_real = [p.real for p in ps]
+            ps_imag = [p.imag + 0.5 for p in ps]
 
-                MT[i, j] += (1 - 2 * N_up / N_samples)
-                if i != j and np.isclose(theta, 0.):
-                    MT[j, i] += (1 - 2 * N_up / N_samples)
-                if i != j and np.isclose(theta, -np.pi / 2):
-                    MT[j, i] -= (1 - 2 * N_up / N_samples)
+            t_norm += time() - z
 
-                if i == j and np.isclose(theta, -np.pi / 2.):
-                    MT[i, i] = 0.
+            z = time()
+            p = np.clip(ps_real + ps_imag, a_min=0., a_max=1.)
+            N_ups = np.random.binomial(N_samples, p)
+            N_ups_reals = N_ups[:len(ps)]
+            N_ups_imags = N_ups[len(ps):]
+            t_samp += time() - z
 
+
+            MT[j:, j] += (1 - 2 * N_ups_reals / N_samples) + 1.0j * (1 - 2 * N_ups_imags / N_samples)
     print('sample estimation of MT(theta) = ', time() - t)
+    print(t_proj, t_norm, t_samp)
     return MT / projector.nterms
 
 
 def compute_connectivity_sample(state0, states, projector, N_samples, theta=0.):
     t = time()
     connectivity = np.zeros(len(states), dtype=np.complex128)
-    state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
-    indexes = np.arange(len(state_ancilla))
+    #state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
+    #indexes = np.arange(len(state_ancilla))
+    thetafull = np.exp(1.0j * np.pi / 2. * theta)
 
-    for proj_idx in range(projector.nterms):
-        for i in range(len(states)):
-            state_i_proj = projector(states[i], proj_idx)
-            state_ancilla[:len(state_i_proj)] = (state0 + np.exp(1.0j * theta) * state_i_proj) / 2.
-            state_ancilla[len(state_i_proj):] = (state0 - np.exp(1.0j * theta) * state_i_proj) / 2.
+    state0_proj_inv = [projector(state0, proj_idx, inv=True) / thetafull for proj_idx in range(projector.nterms)]
 
-            idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
-            N_up = np.sum(idxs >= len(state0))
-
-            connectivity[i] += (1 - 2 * N_up / N_samples)
+    for i in range(len(states)):
+        ps = [(0.5 - np.vdot(state0_proj_inv[proj_idx], states[i]) / 2.).real for proj_idx in range(projector.nterms)]
+        N_ups = np.random.binomial(N_samples, ps)
+        connectivity[i] += np.sum((1 - 2 * N_ups / N_samples))
 
     print('sample estimation of connectivity(theta) = ', time() - t)
     return connectivity / projector.nterms
@@ -430,24 +451,60 @@ def compute_connectivity_sample(state0, states, projector, N_samples, theta=0.):
 def compute_energy_der_sample(state0, states, hamiltonian, projector, N_samples, theta=0.):
     t = time()
     der = np.zeros(len(states), dtype=np.complex128)
-    state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
-    indexes = np.arange(len(state_ancilla))
+    #state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
+    #indexes = np.arange(len(state_ancilla))
     time_sampling = 0.
+    t_proj = 0.
+    t_ham = 0.
+    t_samp = 0.
+    t_norm = 0.
+
+    z = time()
+    state0_proj_inv = [projector(state0, proj_idx, inv=True) for proj_idx in range(projector.nterms)]
+    t_proj += time() - z
+
 
     for i in range(len(states)):
         for ham_idx in range(hamiltonian.nterms):
+            z = time()
             state_ham, j = hamiltonian(states[i], ham_idx)
-            for proj_idx in range(projector.nterms):
-                state_i_proj = projector(state_ham, proj_idx)
-                state_ancilla[:len(state_i_proj)] = (state0 + np.exp(1.0j * theta) * state_i_proj) / 2.
-                state_ancilla[len(state_i_proj):] = (state0 - np.exp(1.0j * theta) * state_i_proj) / 2.
 
-                ts = time()
-                idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
-                time_sampling += time() - ts
-                N_up = np.sum(idxs >= len(state0))
+            t_ham += time() - z
+            z = time()
+            ps = [(0.5 - np.vdot(state0_proj_inv[proj_idx], state_ham) / 2.).real for proj_idx in range(projector.nterms)]
+            t_norm += time() - z
+
+            z = time()
+            N_ups = np.random.binomial(N_samples, ps)
+            t_samp += time() - z
+            der[i] += np.sum((1 - 2 * N_ups / N_samples) * j)
+            continue
+
+            for proj_idx in range(projector.nterms):
+                #z = time()
+                #state_i_proj = projector(state_ham, proj_idx)
+                #t_proj += time() - z
+                z = time()
+                #ptest = np.linalg.norm(state0 - state_i_proj) ** 2 / 4.
+                #p1 = np.linalg.norm(state0_proj_inv[proj_idx] - state_ham) ** 2 / 4.
+                p = (0.5 - np.vdot(state0_proj_inv[proj_idx], state_ham) / 2.).real
+                #print(p1, p.real)
+                #assert np.isclose(p1, p.real)
+                #assert np.isclose(ptest, p)
+                t_norm += time() - z
+                z = time()
+                N_up = np.random.binomial(N_samples, p)
+                t_samp += time() - z
+                #state_ancilla[:len(state_i_proj)] = (state0 + np.exp(1.0j * theta) * state_i_proj) / 2.
+                #state_ancilla[len(state_i_proj):] = (state0 - np.exp(1.0j * theta) * state_i_proj) / 2.
+
+                #ts = time()
+                #idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
+                #time_sampling += time() - ts
+                #N_up = np.sum(idxs >= len(state0))
 
                 der[i] += (1 - 2 * N_up / N_samples) * j
 
     print('sample estimation of energy der numerator(theta) = ', time() - t, 'sampling:', time_sampling)
+    print(t_proj, t_ham, t_samp, t_norm)
     return der / projector.nterms

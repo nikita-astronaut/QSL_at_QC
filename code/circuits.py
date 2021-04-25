@@ -49,9 +49,14 @@ class Circuit(object):
         return state
 
     def get_natural_gradients(self, hamiltonian, projector, N_samples=None):
+        t = time()
         ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, N_samples)
+        print('metric tensor: ', time() - t)
         self.connectivity_sampling = j_sampling
+
+        t = time()
         grads, grads_sampling = self.get_all_derivatives(hamiltonian, projector, N_samples)
+        print('energy derivatives: ', time() - t)
 
         if N_samples is None:
             return grads, ij, j
@@ -258,7 +263,7 @@ class SU2_symmetrized(Circuit):
 
         return
 
-    def __call__(self):
+    def __call__(self, from_idx = None):
         state = self._initial_state()
         # assert np.isclose(np.dot(state.conj(), state), 1.0)
         for layer in self.unitaries:
@@ -276,6 +281,7 @@ class SU2_symmetrized(Circuit):
 
 
     def get_all_derivatives(self, hamiltonian, projector, N_samples):
+        t = time()
         state = self.__call__()
         state_proj = projector(state)
         norm = np.dot(state.conj(), state_proj)
@@ -319,7 +325,7 @@ class SU2_symmetrized(Circuit):
             LEFT = LEFT.conj()
             LEFT_conn = LEFT_conn.conj()
 
-
+        print('grads exact', time() - t)
         if N_samples is None:
             return np.array(grads), None
 
@@ -375,82 +381,84 @@ class SU2_symmetrized(Circuit):
 
 
     def get_metric_tensor(self, projector, N_samples):
-        MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
+        if self.config.test or N_samples is None:
+            t = time()
+            MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
 
-        left_beforeder = self._initial_state()
+            left_beforeder = self._initial_state()
 
-        for i in range(len(self.params)):
-            if i > 0:
-                for layer in self.unitaries[i - 1:i]:
-                    for u in layer:
-                        left_beforeder = u(left_beforeder)  # L_i ... L_0 |0>
+            for i in range(len(self.params)):
+                if i > 0:
+                    for layer in self.unitaries[i - 1:i]:
+                        for u in layer:
+                            left_beforeder = u(left_beforeder)  # L_i ... L_0 |0>
             
-            LEFT = left_beforeder.copy()
-            derivative = LEFT * 0.0
-            for der in self.derivatives[i]:
-                derivative += der(LEFT)
-            LEFT = derivative  # A_i L_{i-1} ... L_0 |0>
+                LEFT = left_beforeder.copy()
+                derivative = LEFT * 0.0
+                for der in self.derivatives[i]:
+                    derivative += der(LEFT)
+                LEFT = derivative  # A_i L_{i-1} ... L_0 |0>
 
-            for layer in self.unitaries[i:]:
-                for u in layer:
-                    LEFT = u(LEFT) # L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                for layer in self.unitaries[i:]:
+                    for u in layer:
+                        LEFT = u(LEFT) # L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
 
-            LEFT = projector(LEFT) # P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                LEFT = projector(LEFT) # P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+
+                for layer in reversed(self.unitaries_herm):
+                    for u_herm in reversed(layer):
+                        LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+
+
+
+
+
+                RIGHT = self._initial_state()  # RIGHT = |0>
+                for j in range(i):
+                    for u in self.unitaries[j]:
+                        RIGHT = u(RIGHT)
+                        LEFT = u(LEFT)
+
+
+                for j in range(i, len(self.params)):
+                    derivative = RIGHT * 0.
+                    for der in self.derivatives[j]:
+                        derivative += der(RIGHT)
+
+                    MT[i, j] = np.dot(LEFT.conj(), derivative)
+                    MT[j, i] = np.conj(MT[i, j])
+
+                    for u in self.unitaries[j]:
+                        RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                        LEFT = u(LEFT) # RIGHT = L_j ... L_0 |0>
+
+
+            der_i = np.zeros(len(self.params), dtype=np.complex128)
+            LEFT = self.__call__()  # L_{N-1} ... L_0 |0>
+            LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
+
+            norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
+            MT = MT / norm
 
             for layer in reversed(self.unitaries_herm):
                 for u_herm in reversed(layer):
-                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
 
-
-
-
-
-            RIGHT = self._initial_state()  # RIGHT = |0>
-            for j in range(i):
-                for u in self.unitaries[j]:
-                    RIGHT = u(RIGHT)
-                    LEFT = u(LEFT)
-
-
-            for j in range(i, len(self.params)):
-                derivative = RIGHT * 0.
-                for der in self.derivatives[j]:
+            RIGHT = self._initial_state()   # RIGHT = |0>
+            for i in range(len(self.params)):
+                derivative = RIGHT * 0. + 0.0j
+                for der in self.derivatives[i]:
                     derivative += der(RIGHT)
 
-                MT[i, j] = np.dot(LEFT.conj(), derivative)
-                MT[j, i] = np.conj(MT[i, j])
+                der_i[i] = np.dot(LEFT.conj(), derivative) / norm  # <psi|P|di psi>
+    
+                for u in self.unitaries[i]:
+                    RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
+                    LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
 
-                for u in self.unitaries[j]:
-                    RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
-                    LEFT = u(LEFT) # RIGHT = L_j ... L_0 |0>
-
-
-        der_i = np.zeros(len(self.params), dtype=np.complex128)
-        LEFT = self.__call__()  # L_{N-1} ... L_0 |0>
-        LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
-
-        norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
-        MT = MT / norm
-
-        for layer in reversed(self.unitaries_herm):
-            for u_herm in reversed(layer):
-                LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
-
-        RIGHT = self._initial_state()   # RIGHT = |0>
-        for i in range(len(self.params)):
-            derivative = RIGHT * 0. + 0.0j
-            for der in self.derivatives[i]:
-                derivative += der(RIGHT)
-
-            der_i[i] = np.dot(LEFT.conj(), derivative) / norm  # <psi|P|di psi>
-
-            for u in self.unitaries[i]:
-                RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
-                LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
-
-        if N_samples is None:
-            return MT, der_i, None, None
-
+            print('MT exact', time() - t)
+            if N_samples is None:
+                return MT, der_i, None, None
         # MT -= np.einsum('i,j->ij', der_i.conj(), der_i)
 
         MT_sample, connectivity = self.get_metric_tensor_sampling(projector, N_samples)
@@ -465,8 +473,9 @@ class SU2_symmetrized(Circuit):
         #    print(der_i[i] * norm, connectivity[i])
 
         
-
-        return MT, der_i, MT_sample / norm_sampling, connectivity / norm_sampling
+        if self.config.test:
+            return MT, der_i, MT_sample / norm_sampling, connectivity / norm_sampling
+        return None, None, MT_sample / norm_sampling, connectivity / norm_sampling
 
     def get_metric_tensor_sampling(self, projector, N_samples):
         ### get states ###
@@ -477,14 +486,18 @@ class SU2_symmetrized(Circuit):
         for i in range(len(self.params)):
             new_params[i] += np.pi / 2.
             self.set_parameters(new_params)
-            self.der_states.append(self.__call__())
+            self.der_states.append(self.__call__(from_idx=i))
             new_params[i] -= np.pi / 2.
         self.set_parameters(new_params)
+
+
         print('obtain states for MT ', time() - t)
-        metric_tensor = utils.compute_metric_tensor_sample(self.der_states, projector, N_samples, theta=0.) + \
-                        1.0j * utils.compute_metric_tensor_sample(self.der_states, projector, N_samples, theta=-np.pi / 2.)
+        metric_tensor = utils.compute_metric_tensor_sample(self.der_states, projector, N_samples)
+        metric_tensor = metric_tensor + metric_tensor.conj().T
+        metric_tensor -= np.diag(np.diag(metric_tensor)) / 2.
+
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=0.) + \
-                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=-np.pi / 2.)
+                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=-1)
         return metric_tensor, connectivity
 
 
@@ -574,7 +587,7 @@ class SU2_symmetrized(Circuit):
 
     def _initialize_parameters(self):
         if self.config.mode == 'fresh':
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.03
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
 
         if self.config.mode == 'preassigned':
             return self.config.start_params
@@ -585,7 +598,7 @@ class SU2_symmetrized(Circuit):
             arr = 'np.array([' + last_line + '])'
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.03
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
 
 
     def _refresh_unitaries_derivatives(self):

@@ -4,9 +4,11 @@ import utils
 from copy import deepcopy
 
 class Projector(object):
-    def __call__(self, state, n_term = None):
+    def __call__(self, state, n_term = None, inv=False):
         if n_term is not None:
-            return state[self.permutations[n_term]] * self.characters[n_term]
+            if inv:
+                return state[self.permutations_inv[n_term]] * 1. / self.characters[n_term] if self.characters[n_term] != 1.0 else state[self.permutations_inv[n_term]]
+            return state[self.permutations[n_term]] * self.characters[n_term] if self.characters[n_term] != 1.0 else state[self.permutations[n_term]]
 
         state_projected = state * 0.0
         for permutation, character in zip(self.permutations, self.characters):
@@ -21,6 +23,7 @@ class ProjectorFull(Projector):
         self.basis_size = basis.number_states
 
         self.maps, self.permutations, self.characters = self._init_projector(generators, eigenvalues, degrees)
+        self.permutations_inv = [np.argsort(perm) for perm in self.permutations]
         self.nterms = len(self.permutations)
 
         return
@@ -77,6 +80,14 @@ class ProjectorFull(Projector):
         assert len(permutations) == total
 
         print('terms in the projector:', total)
+
+        for idx, p in enumerate(permutations):
+            for k in range(idx + 1, len(permutations)):
+                if np.allclose(p, permutations[k]):
+                    print('coincide', idx, k, p)
+                    total -= 1
+        print('unique', total)
+
         return maps, permutations, characters
 
 

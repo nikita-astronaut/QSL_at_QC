@@ -46,12 +46,12 @@ class Hamiltonian(object):
 
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 6, dtype=np.float64)
-        print(repr(energy - self.energy_renorm))
+        energy, ground_state = ls.diagonalize(self._matrix, k = 12, dtype=np.float64)
+        #print(repr(energy - self.energy_renorm))
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
         #    for s in self.permutations:
-        #       print(np.dot(state.conj(), state[s]))
+        #        print(np.dot(state.conj(), state[s]))
         ### DEBUG
         
         print()
@@ -94,6 +94,7 @@ class Hamiltonian(object):
         self.nterms = len(self._terms)
         print('ground state energy:', energy[0] - self.energy_renorm)
         print('system gap =', energy[1] - energy[0])
+        print(energy[1] - self.energy_renorm)
         #exit(-1)
         self.gse = energy[0]
         #exit(-1)
