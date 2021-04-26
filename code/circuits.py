@@ -552,8 +552,7 @@ class SU2_symmetrized(Circuit):
         P_ijun = (SSun + np.eye(4)) / 2.
 
 
-        for n_layers in range(1):
-            
+        for n_layers in range(1):            
             for shid, shift in enumerate([(0, 0), (1, 1), (1, 0), (0, 1)]):
                 for pair in [(0, 4), (1, 5), (2, 6), (3, 7), (8, 12), (9, 13), (10, 14), (11, 15)] if shid < 2 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
                     i, j = pair
@@ -569,6 +568,7 @@ class SU2_symmetrized(Circuit):
                     layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
                     layers.append(deepcopy(layer))
 
+                
                 for pair in [(0, 15), (1, 14), (2, 13), (3, 12), (4, 9), (5, 8), (6, 11), (7, 10)]:
                     i, j = pair
                     xi, yi = i % self.Lx, i // self.Ly
@@ -582,6 +582,22 @@ class SU2_symmetrized(Circuit):
 
                     layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
                     layers.append(deepcopy(layer))
+                '''
+                for pair in [(0, 4), (1, 5), (2, 6), (3, 7), (8, 12), (9, 13), (10, 14), (11, 15)] if shid >= 2 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
+                    i, j = pair
+                    xi, yi = i % self.Lx, i // self.Ly
+                    xj, yj = j % self.Lx, j // self.Ly
+
+                    xi = (xi + shift[0]) % self.Lx
+                    xj = (xj + shift[0]) % self.Lx
+                    yi = (yi + shift[1]) % self.Ly
+                    yj = (yj + shift[1]) % self.Ly
+                    ii, jj = xi + yi * self.Ly, xj + yj * self.Ly
+
+                    layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                '''
+                
             return layers
             
 
