@@ -54,8 +54,10 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
+    lambdas = 3. - np.linspace(0, 2.7, n_iter)
+
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()
@@ -158,7 +160,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
                         np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
 
             circuit.forces = grads.copy()
-            grads = MT_inv.dot(grads)
+            grads = MT_inv.dot(grads - lambdas[n_iter] * der_one.real)
             circuit.forces_SR = grads.copy()
 
         if config.test or config.N_samples is None:
