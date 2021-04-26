@@ -49,9 +49,14 @@ class Circuit(object):
         return state
 
     def get_natural_gradients(self, hamiltonian, projector, N_samples=None):
+        t = time()
         ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, N_samples)
+        print('metric tensor: ', time() - t)
         self.connectivity_sampling = j_sampling
+
+        t = time()
         grads, grads_sampling = self.get_all_derivatives(hamiltonian, projector, N_samples)
+        print('energy derivatives: ', time() - t)
 
         if N_samples is None:
             return grads, ij, j
@@ -199,14 +204,15 @@ class TrotterizedMarshallsSquareHeisenbergNNAFM(Circuit):
 
 
 class SU2_symmetrized(Circuit):
-    def __init__(self, Lx, Ly, basis, config, unitary, BC, spin=0):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
         self.BC = BC
         self.Lx = Lx
         self.Ly = Ly
-        self.n_qubits = Lx * Ly
+        self.n_subl = subl
+        self.n_qubits = Lx * Ly * subl
         self.spin = spin
         self.dimerization = config.dimerization
-        super().__init__(Lx * Ly, basis, config, unitary)
+        super().__init__(Lx * Ly * subl, basis, config, unitary)
         #self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
         #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
         #self.Cx = utils.get_Cx_symmetry_map(self.Lx, self.Ly)
@@ -229,11 +235,23 @@ class SU2_symmetrized(Circuit):
                                                   ([ls.Interaction(SSun, all_bondsun)] if len(all_bondsun) > 0 else []))
 
 
+        self.singletizer = np.zeros((4, 4), dtype=np.complex128)
+        self.singletizer[1, 0] = 1. / np.sqrt(2)
+        self.singletizer[2, 0] = -1. / np.sqrt(2)
+        self.singletizer = self.singletizer + self.singletizer.T
+
+        self.tripletizer = np.zeros((4, 4), dtype=np.complex128)
+        self.tripletizer[3, 0] = 1.
+        self.tripletizer = self.tripletizer + self.tripletizer.T
+
+        self.octupletizer = np.zeros((16, 16), dtype=np.complex128)
+        self.octupletizer[15, 0] = 1.
+
+        self.octupletizer = self.octupletizer + self.octupletizer.T
+
+
         self.ini_state = None
         self.ini_state = self._initial_state()
-
-
-        self.pairwise_distances = self.get_pairwise_distances()
 
         ### defining operator locs ###
         self.layers = self._get_dimerizarion_layers()
@@ -245,7 +263,7 @@ class SU2_symmetrized(Circuit):
 
         return
 
-    def __call__(self):
+    def __call__(self, from_idx = None):
         state = self._initial_state()
         # assert np.isclose(np.dot(state.conj(), state), 1.0)
         for layer in self.unitaries:
@@ -263,6 +281,7 @@ class SU2_symmetrized(Circuit):
 
 
     def get_all_derivatives(self, hamiltonian, projector, N_samples):
+        t = time()
         state = self.__call__()
         state_proj = projector(state)
         norm = np.dot(state.conj(), state_proj)
@@ -306,7 +325,7 @@ class SU2_symmetrized(Circuit):
             LEFT = LEFT.conj()
             LEFT_conn = LEFT_conn.conj()
 
-
+        print('grads exact', time() - t)
         if N_samples is None:
             return np.array(grads), None
 
@@ -362,82 +381,84 @@ class SU2_symmetrized(Circuit):
 
 
     def get_metric_tensor(self, projector, N_samples):
-        MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
+        if self.config.test or N_samples is None:
+            t = time()
+            MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
 
-        left_beforeder = self._initial_state()
+            left_beforeder = self._initial_state()
 
-        for i in range(len(self.params)):
-            if i > 0:
-                for layer in self.unitaries[i - 1:i]:
-                    for u in layer:
-                        left_beforeder = u(left_beforeder)  # L_i ... L_0 |0>
+            for i in range(len(self.params)):
+                if i > 0:
+                    for layer in self.unitaries[i - 1:i]:
+                        for u in layer:
+                            left_beforeder = u(left_beforeder)  # L_i ... L_0 |0>
             
-            LEFT = left_beforeder.copy()
-            derivative = LEFT * 0.0
-            for der in self.derivatives[i]:
-                derivative += der(LEFT)
-            LEFT = derivative  # A_i L_{i-1} ... L_0 |0>
+                LEFT = left_beforeder.copy()
+                derivative = LEFT * 0.0
+                for der in self.derivatives[i]:
+                    derivative += der(LEFT)
+                LEFT = derivative  # A_i L_{i-1} ... L_0 |0>
 
-            for layer in self.unitaries[i:]:
-                for u in layer:
-                    LEFT = u(LEFT) # L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                for layer in self.unitaries[i:]:
+                    for u in layer:
+                        LEFT = u(LEFT) # L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
 
-            LEFT = projector(LEFT) # P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                LEFT = projector(LEFT) # P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+
+                for layer in reversed(self.unitaries_herm):
+                    for u_herm in reversed(layer):
+                        LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+
+
+
+
+
+                RIGHT = self._initial_state()  # RIGHT = |0>
+                for j in range(i):
+                    for u in self.unitaries[j]:
+                        RIGHT = u(RIGHT)
+                        LEFT = u(LEFT)
+
+
+                for j in range(i, len(self.params)):
+                    derivative = RIGHT * 0.
+                    for der in self.derivatives[j]:
+                        derivative += der(RIGHT)
+
+                    MT[i, j] = np.dot(LEFT.conj(), derivative)
+                    MT[j, i] = np.conj(MT[i, j])
+
+                    for u in self.unitaries[j]:
+                        RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                        LEFT = u(LEFT) # RIGHT = L_j ... L_0 |0>
+
+
+            der_i = np.zeros(len(self.params), dtype=np.complex128)
+            LEFT = self.__call__()  # L_{N-1} ... L_0 |0>
+            LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
+
+            norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
+            MT = MT / norm
 
             for layer in reversed(self.unitaries_herm):
                 for u_herm in reversed(layer):
-                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
+                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
 
-
-
-
-
-            RIGHT = self._initial_state()  # RIGHT = |0>
-            for j in range(i):
-                for u in self.unitaries[j]:
-                    RIGHT = u(RIGHT)
-                    LEFT = u(LEFT)
-
-
-            for j in range(i, len(self.params)):
-                derivative = RIGHT * 0.
-                for der in self.derivatives[j]:
+            RIGHT = self._initial_state()   # RIGHT = |0>
+            for i in range(len(self.params)):
+                derivative = RIGHT * 0. + 0.0j
+                for der in self.derivatives[i]:
                     derivative += der(RIGHT)
 
-                MT[i, j] = np.dot(LEFT.conj(), derivative)
-                MT[j, i] = np.conj(MT[i, j])
+                der_i[i] = np.dot(LEFT.conj(), derivative) / norm  # <psi|P|di psi>
+    
+                for u in self.unitaries[i]:
+                    RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
+                    LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
 
-                for u in self.unitaries[j]:
-                    RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
-                    LEFT = u(LEFT) # RIGHT = L_j ... L_0 |0>
-
-
-        der_i = np.zeros(len(self.params), dtype=np.complex128)
-        LEFT = self.__call__()  # L_{N-1} ... L_0 |0>
-        LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
-
-        norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
-        MT = MT / norm
-
-        for layer in reversed(self.unitaries_herm):
-            for u_herm in reversed(layer):
-                LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
-
-        RIGHT = self._initial_state()   # RIGHT = |0>
-        for i in range(len(self.params)):
-            derivative = RIGHT * 0. + 0.0j
-            for der in self.derivatives[i]:
-                derivative += der(RIGHT)
-
-            der_i[i] = np.dot(LEFT.conj(), derivative) / norm  # <psi|P|di psi>
-
-            for u in self.unitaries[i]:
-                RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
-                LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
-
-        if N_samples is None:
-            return MT, der_i, None, None
-
+            print('MT exact', time() - t)
+            if N_samples is None:
+                return MT, der_i, None, None
         # MT -= np.einsum('i,j->ij', der_i.conj(), der_i)
 
         MT_sample, connectivity = self.get_metric_tensor_sampling(projector, N_samples)
@@ -452,8 +473,9 @@ class SU2_symmetrized(Circuit):
         #    print(der_i[i] * norm, connectivity[i])
 
         
-
-        return MT, der_i, MT_sample / norm_sampling, connectivity / norm_sampling
+        if self.config.test:
+            return MT, der_i, MT_sample / norm_sampling, connectivity / norm_sampling
+        return None, None, MT_sample / norm_sampling, connectivity / norm_sampling
 
     def get_metric_tensor_sampling(self, projector, N_samples):
         ### get states ###
@@ -464,14 +486,18 @@ class SU2_symmetrized(Circuit):
         for i in range(len(self.params)):
             new_params[i] += np.pi / 2.
             self.set_parameters(new_params)
-            self.der_states.append(self.__call__())
+            self.der_states.append(self.__call__(from_idx=i))
             new_params[i] -= np.pi / 2.
         self.set_parameters(new_params)
+
+
         print('obtain states for MT ', time() - t)
-        metric_tensor = utils.compute_metric_tensor_sample(self.der_states, projector, N_samples, theta=0.) + \
-                        1.0j * utils.compute_metric_tensor_sample(self.der_states, projector, N_samples, theta=-np.pi / 2.)
+        metric_tensor = utils.compute_metric_tensor_sample(self.der_states, projector, N_samples)
+        metric_tensor = metric_tensor + metric_tensor.conj().T
+        metric_tensor -= np.diag(np.diag(metric_tensor)) / 2.
+
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=0.) + \
-                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=-np.pi / 2.)
+                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=-1)
         return metric_tensor, connectivity
 
 
@@ -479,103 +505,27 @@ class SU2_symmetrized(Circuit):
         if self.ini_state is not None:
             return self.ini_state.copy()
 
-        '''
-        state1 = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state2 = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        
-        spin_1 = np.zeros(self.n_qubits, dtype=np.int64)
-        spin_2 = np.zeros(self.n_qubits, dtype=np.int64)
-        spin_3 = np.zeros(self.n_qubits, dtype=np.int64)
-        spin_4 = np.zeros(self.n_qubits, dtype=np.int64)
-        for i in range(self.n_qubits):
-            x, y = i % self.Lx, i // self.Lx
-            if x % 2 == 0:
-                spin_1[i] = 1.
-            else:
-                spin_2[i] = 1.
-
-            if y % 2 == 0:
-                spin_3[i] = 1.
-            else:
-                spin_4[i] = 1.
-
-        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state[utils.spin_to_index(spin_1, number_spins = self.n_qubits)] = 1. / 2
-        state[utils.spin_to_index(spin_2, number_spins = self.n_qubits)] = 1. / 2#np.sqrt(2)
-        state[utils.spin_to_index(spin_3, number_spins = self.n_qubits)] = 1. / 2
-        state[utils.spin_to_index(spin_4, number_spins = self.n_qubits)] = 1. / 2
-
-        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
-        for i in range(self.basis.number_states):
-            x = self.basis.states[i]
-            _, _, norm = self.basis.state_info(x)
-            state_su2[i] = state[self.basis_bare.index(x)] / norm
-            #print(state[self.basis_bare.index(x)] / norm)
-
-        #print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
-        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
-
-        
-
-        return state_su2
-        
-
-        
-        state1[0] = 1.
-        state2[0] = 1.
-        ''' 
-        #hadamard = np.array([[1, 1], [1, -1]], dtype=np.complex128) / np.sqrt(2)
-        #for i in np.arange(self.Lx * self.Ly):
-        #    op = ls.Operator(self.basis, [ls.Interaction(hadamard, [(i,)])])
-        #    state = op(state)
-        
-
         state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
         state[0] = 1.
-
-        singletizer = np.zeros((4, 4), dtype=np.complex128)
-        singletizer[1, 0] = 1. / np.sqrt(2)
-        singletizer[2, 0] = -1. / np.sqrt(2)
-        singletizer = singletizer + singletizer.T
-
-        tripletizer = np.zeros((4, 4), dtype=np.complex128)
-        #tripletizer[1, 0] = +1. / np.sqrt(2)
-        #tripletizer[2, 0] = +1. / np.sqrt(2)
-        tripletizer[3, 0] = 1.
-        tripletizer = tripletizer + tripletizer.T
-
-        octupletizer = np.zeros((16, 16), dtype=np.complex128)
-        #octupletizer[12, 0] = +1. / np.sqrt(6)
-        #octupletizer[9, 0] = +1. / np.sqrt(6)
-        #octupletizer[3, 0] = +1. / np.sqrt(6)
-        #octupletizer[6, 0] = +1. / np.sqrt(6)
-        #octupletizer[10, 0] = +1. / np.sqrt(6)
-        #octupletizer[5, 0] = +1. / np.sqrt(6)
-        octupletizer[15, 0] = 1.
-
-        octupletizer = octupletizer + octupletizer.T
-
-        
+       
         if self.spin == 0:
-            #for i in np.arange(self.Lx * self.Ly)[::2]:
             for pair in self.dimerization:
-            #for pair in [(5, 10), (9, 6), (1, 4), (2, 7), (8, 13), (11, 14), (0, 15), (3, 12)]:
-            #for pair in [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
-                op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 state = op(state)
         elif self.spin == 1:
             for idx, pair in enumerate(self.dimerization):
-                if idx != 4:
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+                if idx != 0:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 else:
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(tripletizer, [pair])])
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.tripletizer, [pair])])
                 state = op(state)
         else:
-            for pair in [(0, 1), (2, 3), (4, 8), (7, 11), (12, 13), (14, 15)]:
-                op = ls.Operator(self.basis_bare, [ls.Interaction(singletizer, [pair])])
+            for idx, pair in enumerate(self.dimerization):
+                if idx < len(self.dimerization) - 2:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                else:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.octupletizer, [tuple(list(self.dimerization[-2]) + list(self.dimerization[-1]))])])
                 state = op(state)
-            op = ls.Operator(self.basis_bare, [ls.Interaction(octupletizer, [(5, 6, 9, 10)])])
-            state = op(state)
 
         assert np.isclose(np.dot(state.conj(), state), 1.0)
         
@@ -585,57 +535,16 @@ class SU2_symmetrized(Circuit):
             if phase == -1:
                 state = op(state)
 
-
-
         state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
         for i in range(self.basis.number_states):
             x = self.basis.states[i]
             _, _, norm = self.basis.state_info(x)
             state_su2[i] = state[self.basis_bare.index(x)] / norm
-            #print(state[self.basis_bare.index(x)] / norm)
 
-        #print(self.spin, np.dot(state_su2.conj(), state_su2), np.dot(state.conj(), state))
         assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
-
-        if self.spin == 0.0:
-            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 0.0)
-        elif self.spin == 1.0:
-            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 2.0 * 4.)
-        else:
-            assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, 6.0 * 4.)
-
-
+        assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.n_qubits, self.spin * (self.spin + 1) * 4.)
         
         return state_su2
-
-    def get_pairwise_distances(self):
-        distances = np.zeros((self.Lx * self.Ly, self.Lx * self.Ly))
-
-        for i in range(self.Lx * self.Ly):
-            for j in range(self.Lx * self.Ly):
-                xi, yi = i % self.Lx, i // self.Lx
-                xj, yj = j % self.Lx, j // self.Lx
-
-                
-                distance = np.min([\
-                                   np.sqrt((xi - xj) ** 2 + (yi - yj) ** 2), \
-                                   np.sqrt((xi - xj + self.Lx) ** 2 + (yi - yj) ** 2), \
-                                   np.sqrt((xi - xj - self.Lx) ** 2 + (yi - yj) ** 2), \
-                                   np.sqrt((xi - xj) ** 2 + (yi - yj + self.Ly) ** 2), \
-                                   np.sqrt((xi - xj) ** 2 + (yi - yj - self.Ly) ** 2), \
-                                   np.sqrt((xi - xj - self.Lx) ** 2 + (yi - yj - self.Ly) ** 2), \
-                                   np.sqrt((xi - xj - self.Lx) ** 2 + (yi - yj + self.Ly) ** 2), \
-                                   np.sqrt((xi - xj + self.Lx) ** 2 + (yi - yj + self.Ly) ** 2), \
-                                   np.sqrt((xi - xj + self.Lx) ** 2 + (yi - yj - self.Ly) ** 2)
-                                  ])
-                distance = np.sqrt((xi - xj) ** 2 + (yi - yj) ** 2)  # OBC
-
-                distances[i, j] = distance  # PBC
-
-        assert np.allclose(distances, distances.T)
-
-        return np.around(distances, decimals=4)
-
 
     def _get_dimerizarion_layers(self):
         layers = []
@@ -674,122 +583,11 @@ class SU2_symmetrized(Circuit):
                     layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
                     layers.append(deepcopy(layer))
             return layers
-        
-            for shift in [(0, 0), (0, 1), (1, 0), (1, 1)]:
-                for pair in [(0, 12), (1, 5), (2, 6), (3, 15), (4, 7), (8, 11), (9, 13), (10, 14)]:
-                    i, j = pair
-                    xi, yi = i % self.Lx, i // self.Ly
-                    xj, yj = j % self.Lx, j // self.Ly
-
-                    xi = (xi + shift[0]) % self.Lx
-                    xj = (xj + shift[0]) % self.Lx
-                    yi = (yi + shift[1]) % self.Ly
-                    yj = (yj + shift[1]) % self.Ly
-                    ii, jj = xi + yi * self.Ly, xj + yj * self.Ly
-
-                    layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
-                    layers.append(deepcopy(layer))
-        
-            return layers
             
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 0:
-                    continue
-                i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-                if (y + 1 < self.Ly) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 1:
-                    continue
-                i_to = (x + 0) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-                if (y + 1 < self.Ly) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if x % 2 == 0:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
-                if (x + 1 < self.Lx) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if x % 2 == 1:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y + 0) % self.Lx) * self.Lx
-                if (x + 1 < self.Lx) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 0:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-                if (x + 1 < self.Lx and y + 1 < self.Ly) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 1:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y + 1) % self.Lx) * self.Lx
-                if (y + 1 < self.Ly and x + 1 < self.Lx) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 1:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-                if (y > 0 and x + 1 < self.Lx) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-
-            for i in range(self.Lx * self.Ly):
-                layer = []
-                x, y = i % self.Lx, i // self.Ly
-
-                if y % 2 == 0:
-                    continue
-                i_to = (x + 1) % self.Lx + ((y - 1) % self.Lx) * self.Lx
-                if (x + 1 < self.Lx and y > 0) or self.BC == 'PBC':
-                    layer.append(((i, i_to), P_ij if self.unitary[i, i_to] == +1 else P_ijun))
-                    layers.append(deepcopy(layer))
-            
-        return layers
-        
-
-
 
     def _initialize_parameters(self):
-        if self.config.mode == 'random':
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.03
+        if self.config.mode == 'fresh':
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
 
         if self.config.mode == 'preassigned':
             return self.config.start_params
@@ -800,7 +598,7 @@ class SU2_symmetrized(Circuit):
             arr = 'np.array([' + last_line + '])'
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.03
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
 
 
     def _refresh_unitaries_derivatives(self):
@@ -822,17 +620,133 @@ class SU2_symmetrized(Circuit):
                     derivatives_layer.append(ls.Operator(self.basis, [ls.Interaction(1.0j * operator, [pair])]))
 
             
-            #else:
-            #    par = self.params[i]
-
-            #    #### adding z-interlayers ####
-            #    for i in range(self.Lx * self.Ly):
-            #        unitaries_layer.append(ls.Operator(self.basis, [ls.Interaction(scipy.linalg.expm(1.0j * par * sz), [(i,)])]))
-            #        unitaries_herm_layer.append(ls.Operator(self.basis, [ls.Interaction(scipy.linalg.expm(-1.0j * par * sz), [(i,)])]))
-            #        derivatives_layer.append(ls.Operator(self.basis, [ls.Interaction(1.0j * sz, [(i,)])]))
             self.unitaries.append(unitaries_layer)
             self.unitaries_herm.append(unitaries_herm_layer)
             self.derivatives.append(derivatives_layer)
+        return
+
+
+class SU2_symmetrized_hexagon(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(1, 6, 1, basis, config, unitary, BC, spin)
+        self.n_qubits = 6
 
         return
+
+
+    def _initial_state(self):
+        if self.ini_state is not None:
+            return self.ini_state.copy()
+
+        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
+        state[0] = 1.
+
+        if self.spin == 0:
+            for pair in self.dimerization:
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                state = op(state)
+        elif self.spin == 1:
+            for idx, pair in enumerate(self.dimerization):
+                if idx != 0:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                else:
+                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.tripletizer, [pair])])
+                state = op(state)
+        else:
+            for pair in [(0, 1)]:
+                op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
+                state = op(state)
+            op = ls.Operator(self.basis_bare, [ls.Interaction(self.octupletizer, [(2, 3, 4, 5)])])
+            state = op(state)
+
+        assert np.isclose(np.dot(state.conj(), state), 1.0)
+
+        ### perform the unitary transform ###
+        for site, phase in enumerate(self.unitary_site):
+            op = ls.Operator(self.basis_bare, [ls.Interaction(sz, [(site,)])])
+            if phase == -1:
+                state = op(state)
+
+        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
+        for i in range(self.basis.number_states):
+            x = self.basis.states[i]
+            _, _, norm = self.basis.state_info(x)
+            state_su2[i] = state[self.basis_bare.index(x)] / norm
+
+        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
+        assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.Lx * self.Ly, self.spin * (self.spin + 1) * 4.)
+
+        return state_su2
+
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+
+        for pattern in [[(0, 1), (2, 3), (4, 5)], [(1, 2), (3, 4), (0, 5)], [(1, 3), (0, 4)], [(2, 4), (3, 5)], [(0, 4), (1, 3)]]:                
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+        return layers
+
+
+class SU2_symmetrized_honeycomb_2x2(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = 2 * Lx* Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+
+        for pattern in [
+                        [(0, 7), (2, 5), (3, 4), (1, 6)], \
+                        [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                        [(0, 5), (2, 7), (1, 4), (3, 6)], \
+                        [(0, 4), (1, 5), (2, 6), (3, 7)], \
+                        [(0, 1), (2, 3), (4, 5), (6, 7)], \
+                        [(0, 6), (2, 4), (1, 7), (3, 5)]
+                ]:
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+        return layers
+
+class SU2_symmetrized_honeycomb_3x3(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = 2 * Lx* Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+
+
+        bonds = [(0, 1), (0, 13), (0, 15), (1, 6), (1, 10), (2, 3), (2, 15), (2, 17), (3, 6), (3, 8), (4, 5), (4, 13), (4, 17), (5, 8), (5, 10), (6, 7), (7, 12), (7, 16), (8, 9), (9, 12), (9, 14), (10, 11), (11, 14), (11, 16), (12, 13), (14, 15), (16, 17)]
+        #bonds_j2 = [(0, 2), (0, 6), (0, 14), (0, 12), (0, 4), (0, 10), (1, 3), (1, 15), (1, 13), (1, 5), (1, 7), (1, 11), (2, 14), (2, 16), (2, 4), (2, 8), (2, 6), (3, 15), (3, 17), (3, 5), (3, 9), (3, 7), (4, 8), (4, 10), (4, 12), (4, 16), (5, 17), (5, 13), (5, 11), (5, 9), (6, 8), (6, 12), (6, 16), (6, 10), (7, 9), (7, 13), (7, 17), (7, 11), (8, 10), (8, 14), (8, 12), (9, 10), (9, 11), (9, 15), (9, 13), (10, 14), (10, 16), (11, 15), (11, 17), (12, 14), (12, 16), (13, 15), (13, 17), (14, 16)]
+        for pattern in [
+                    [(0, 15), (2, 17), (4, 13), (6, 3), (8, 5), (10, 1), (12, 9), (14, 11), (16, 7)], \
+                    [(0, 13), (2, 15), (4, 17), (6, 1), (8, 3), (10, 5), (12, 7), (14, 9), (16, 11)], \
+                    [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17)], \
+                    [(0, 15), (2, 17), (4, 13), (6, 3), (8, 5), (10, 1), (12, 9), (14, 11), (16, 7)], \
+                    [(0, 13), (2, 15), (4, 17), (6, 1), (8, 3), (10, 5), (12, 7), (14, 9), (16, 11)], \
+                    [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17)], \
+                ]:
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+        return layers
 

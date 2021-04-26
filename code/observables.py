@@ -30,6 +30,35 @@ def neel_order(Lx, Ly, basis, su2=False):
 
     return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel'
 
+def neel_order_hexagon(basis, su2=False):
+    n_qubits = 6
+
+    site_plus = []
+    site_minus = []
+    for i in range(n_qubits):
+        if i % 2 == 0:
+            site_plus.append(i)
+        else:
+            site_minus.append(i)
+
+    return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel_hex'
+
+
+def neel_order_honeycomb(Lx, Ly, basis, su2=False):
+    n_qubits = 2 * Lx * Ly
+
+    site_plus = []
+    site_minus = []
+    for i in range(n_qubits):
+        if i % 2 == 0:
+            site_plus.append(i)
+        else:
+            site_minus.append(i)
+
+    return ls.Operator(basis, [ls.Interaction(sz / n_qubits, site_plus), ls.Interaction(-sz / n_qubits, site_minus)]), 'Neel_honey'
+
+
+
 def stripe_order(Lx, Ly, basis, su2=False):
     n_qubits = Lx * Ly
 
@@ -63,6 +92,35 @@ def dimer_order(Lx, Ly, basis, su2=False, BC='PBC'):
     return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Dimer'
 
 
+
+def dimer_order_honeycomb(Lx, Ly, basis, su2=False, BC='PBC'):
+    n_qubits = 2 * Lx * Ly
+
+    bonds = []
+    for i in range(n_qubits // 2):
+        bonds.append((2 * i, 2 * i + 1))
+    return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bonds)]), 'dimer_honeycomb'
+
+
+
+def plaquette_order_hexagon(basis, su2=False, BC='PBC'):
+    n_qubits = 6
+
+    bond_plus = [(0, 1), (2, 3), (4, 5)]
+    bond_minus = [(1, 2), (3, 4), (0, 5)]
+
+    return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Plaquette_hex'
+
+
+def plaquette_order_honeycomb_3x3(basis, su2=False, BC='PBC'):
+    n_qubits = 18
+
+    bond_plus = [(0, 1), (3, 6), (2, 15), (8, 9), (11, 14), (5, 10), (16, 17), (4, 13), (7, 12)]
+    bond_minus = [(1, 6), (2, 3), (0, 15), (9, 14), (10, 11), (5, 8), (17, 4), (12, 13), (7, 16)]
+
+    return ls.Operator(basis, [ls.Interaction(SS / n_qubits, bond_plus), ls.Interaction(-SS / n_qubits, bond_minus)]), 'Plaquette_hex_3x3'
+
+
 class Observables(object):
     def __init__(self, config, hamiltonian, circuit, projector):
         self.path_to_logs = config.path_to_logs
@@ -80,6 +138,7 @@ class Observables(object):
         self.hamiltonian = hamiltonian
         self.projector = projector
         self.circuit = circuit
+        self.config = config
 
 
         ### prepare main log ###
@@ -91,12 +150,18 @@ class Observables(object):
         return
 
     def write_logs(self):
-        force_exact = self.circuit.forces_exact
-        for f in force_exact:
-            self.exact_force_log.write('{:.4f} '.format(f))
-        self.exact_force_log.write('\n')
-        self.exact_force_log.flush()
+        if self.config.test or self.config.N_samples is None:
+            force_exact = self.circuit.forces_exact
+            for f in force_exact:
+                self.exact_force_log.write('{:.4f} '.format(f))
+            self.exact_force_log.write('\n')
+            self.exact_force_log.flush()
 
+            force_SR_exact = self.circuit.forces_SR_exact
+            for f in force_SR_exact:
+                self.exact_force_SR_log.write('{:.4f} '.format(f))
+            self.exact_force_SR_log.write('\n')
+            self.exact_force_SR_log.flush()
 
         force = self.circuit.forces
         if force is not None:
@@ -104,13 +169,6 @@ class Observables(object):
                 self.force_log.write('{:.4f} '.format(f))
             self.force_log.write('\n')
             self.force_log.flush()
-
-
-        force_SR_exact = self.circuit.forces_SR_exact
-        for f in force_SR_exact:
-            self.exact_force_SR_log.write('{:.4f} '.format(f))
-        self.exact_force_SR_log.write('\n')
-        self.exact_force_SR_log.flush()
 
 
         force_SR = self.circuit.forces_SR
