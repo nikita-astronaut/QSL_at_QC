@@ -20,8 +20,9 @@ import os
 class opt_parameters:
     def __init__(self):
         j2 = float(sys.argv[2])
+        n_trial = int(sys.argv[3])
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/hexagon/{:.3f}/'.format(j2)
+        self.path_to_logs = '/users/nastrakh/QSL_at_QC/logs/samples_16/{:d}/{:.3f}/'.format(n_trial, j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
 
