@@ -24,6 +24,7 @@ class opt_parameters:
         self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/hexagon/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
+
         self.test = False
 
         ### setting up geometry and parameters ###
@@ -77,7 +78,7 @@ class opt_parameters:
                                 }
 
 
-        self.dimerization = [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)] if j2 > 0.8 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
+        self.dimerization = [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)] if j2 > 0.6 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
         self.circuit = circuits.SU2_symmetrized
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
@@ -111,8 +112,8 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 16
-        self.SR_eig_cut = 1e-3#3e-2#1e-2
+        self.N_samples = 2 ** 12
+        self.SR_eig_cut = 1e-2#3e-2#1e-2
         self.SR_diag_reg = 0.#1e-4#3e-2#1e-2
 
         return
