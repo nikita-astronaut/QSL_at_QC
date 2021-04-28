@@ -56,7 +56,12 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
 
 def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
-    lambdas = 3. - np.linspace(0, 2.7, n_iter)
+
+    lambdas = np.concatenate([\
+                              np.ones(1000) * 3., \
+                              np.ones(500) * 1., \
+                              np.ones(500) * 0.3 \
+                              ])
 
     for n_iter in range(n_iter):
         t_iter = time()
