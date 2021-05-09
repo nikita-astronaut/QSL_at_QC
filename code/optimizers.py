@@ -2,29 +2,6 @@ import scipy as sp
 import numpy as np
 import utils
 from time import time
-'''
-def _circuit_energy(param, circuit, hamiltonian, config, projector):
-    circuit.set_parameters(param)
-    
-    #norm_sample = utils.compute_norm_sample(state, projector, config.N_samples)
-    #energy_sample = utils.compute_energy_sample(state, hamiltonian, projector, config.N_samples)
-    #energy_sample_symmetrized = utils.compute_energy_sample_symmetrized(state, hamiltonian, projector, config.N_samples)
-    #print('norm :', norm, norm_sample)
-    #print('energy: ', np.dot(np.conj(state), hamiltonian(state_proj) / norm).real, energy_sample / norm_sample, energy_sample_symmetrized / norm_sample)
-    state = circuit()
-    if config.N_samples is None:
-        state = circuit()
-        assert np.isclose(state.conj().dot(state), 1.0)
-        state_proj = projector(state)
-        energy = np.dot(np.conj(state), hamiltonian(state_proj))
-        norm = np.dot(state.conj(), state_proj)
-        return (energy / norm).real
-
-    
-    energy_sample = utils.compute_energy_sample(state, hamiltonian, projector, config.N_samples)
-    norm_sample = utils.compute_norm_sample(state, projector, config.N_samples)
-    return (energy_sample / norm_sample).real
-'''
 
 def gradiend_descend(energy_val, init_values, args, circuit = None, \
                      hamiltonian = None, config = None, projector = None, \
@@ -54,15 +31,17 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
-    lambdas = np.concatenate([\
-                              np.ones(1000) * 3., \
-                              np.ones(500) * 1., \
-                              np.ones(500) * 0.3 \
-                              ])
+    #lambdas = 0.1 * np.concatenate([\
+    #                              np.ones(2000) * 3., \
+    #                              np.ones(1000) * 1., \
+    #                              np.ones(1000) * 0.3 \
+    #                             ])
+    lambdas = 1. * np.ones(100000)
 
+    lamb = 0.
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()
@@ -87,16 +66,24 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, 
         #np.save('conn_sampl.npy', der_one)
 
         #print('grads')
-        #for conexact, consampl in zip(grads_exact, grads):
-        #    print(conexact, consampl)
+
+        if config.test:
+            print('grads')
+            for conexact, consampl in zip(grads_exact, grads):
+                print(conexact, consampl, np.abs(conexact - consampl))
+
+            print('connectivities')
+            for conexact, consampl in zip(der_one_exact, der_one):
+                print(conexact, consampl, np.abs(conexact - consampl))
 
         #np.save('grads_exact.npy', grads_exact)
         #np.save('grads_sampl.npy', grads)
 
-
-        #for i in range(ij.shape[0]):
-        #    for j in range(ij.shape[1]):
-        #        print(i, j, ij_exact[i, j], ij[i, j])
+        if config.test:
+            for i in range(ij.shape[0]):
+                for j in range(ij.shape[1]):
+                    if i == j:
+                        print(i, j, ij_exact[i, j], ij[i, j])
 
         #np.save('MT_exact.npy', ij_exact)
         #np.save('MT_sampl.npy', ij)
@@ -165,7 +152,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, 
                         np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
 
             circuit.forces = grads.copy()
-            grads = MT_inv.dot(grads - lambdas[n_iter] * der_one.real)
+            #grads = MT_inv.dot(grads - lambdas[n_iter] * der_one.real)
+            grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
             circuit.forces_SR = grads.copy()
 
         if config.test or config.N_samples is None:
@@ -210,13 +198,15 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, 
             #exit(-1)
         if config.N_samples is not None:
             new_params = (cur_params - lr * grads).real
+            circuit.lamb -= (circuit.norm - config.target_norm) * config.Z * lr
         else:
             new_params = (cur_params - lr * grads_exact).real
-                   #print('forces_sampled =', repr(grads))
-            #print('forces_exact =', repr(grads_exact))
+        if config.test:
+            print('forces_sampled =', repr(grads))
+            print('forces_exact =', repr(grads_exact))
             #print('current parameters =', repr(new_params))
 
-
+         
         circuit.set_parameters(new_params)
 
         obs.write_logs()
@@ -228,6 +218,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, 
         #print('iteration: {:d}, energy = {:.7f}, fidelity = {:.7f}'.format(n_iter, _circuit_energy(new_params, *args) - hamiltonian.energy_renorm, \
         #                np.abs(np.dot(hamiltonian.ground_state[0].conj(), state_proj)) ** 2))
         print('iteration took', time() - t_iter)
+        print('lambda = {:.3f}'.format(circuit.lamb))
     return circuit
 
 def get_all_derivatives(cur_params, circuit, hamiltonian, config, projector):

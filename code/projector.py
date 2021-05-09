@@ -7,12 +7,12 @@ class Projector(object):
     def __call__(self, state, n_term = None, inv=False):
         if n_term is not None:
             if inv:
-                return state[self.permutations_inv[n_term]] * 1. / self.characters[n_term] if self.characters[n_term] != 1.0 else state[self.permutations_inv[n_term]]
-            return state[self.permutations[n_term]] * self.characters[n_term] if self.characters[n_term] != 1.0 else state[self.permutations[n_term]]
+                return state[..., self.permutations_inv[n_term]] * 1. / self.characters[n_term] if self.characters[n_term] != 1.0 else state[..., self.permutations_inv[n_term]]
+            return state.T[self.permutations[n_term], ...].T * self.characters[n_term] if self.characters[n_term] != 1.0 else np.ascontiguousarray(state.T)[self.permutations[n_term], ...].T
 
         state_projected = state * 0.0
         for permutation, character in zip(self.permutations, self.characters):
-            state_projected += state[permutation] * character
+            state_projected += state[..., permutation] * character
         return state_projected / len(self.permutations)
         
 

@@ -212,6 +212,7 @@ class SU2_symmetrized(Circuit):
         self.n_qubits = Lx * Ly * subl
         self.spin = spin
         self.dimerization = config.dimerization
+        self.lamb = 1.
         super().__init__(Lx * Ly * subl, basis, config, unitary)
         #self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
         #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
@@ -263,7 +264,7 @@ class SU2_symmetrized(Circuit):
 
         return
 
-    def __call__(self, from_idx = None):
+    def __call__(self, idx = None):
         state = self._initial_state()
         # assert np.isclose(np.dot(state.conj(), state), 1.0)
         for layer in self.unitaries:
@@ -282,52 +283,54 @@ class SU2_symmetrized(Circuit):
 
     def get_all_derivatives(self, hamiltonian, projector, N_samples):
         t = time()
-        state = self.__call__()
-        state_proj = projector(state)
-        norm = np.dot(state.conj(), state_proj)
 
-        energy = np.dot(np.conj(state), hamiltonian(state_proj) / norm)
+        if N_samples is None or self.config.test == True:
+            state = self.__call__()
+            state_proj = projector(state)
+            norm = np.dot(state.conj(), state_proj)
 
-        LEFT = hamiltonian(state_proj)
-        LEFT_conn = state_proj.copy()  # total projector is Hermitean
+            energy = np.dot(np.conj(state), hamiltonian(state_proj) / norm)
 
-        for layer in reversed(self.unitaries_herm):
-            for u_herm in reversed(layer):
-                LEFT = u_herm(LEFT)
-                LEFT_conn = u_herm(LEFT_conn)
-        LEFT = LEFT.conj()
-        LEFT_conn = LEFT_conn.conj()
+            LEFT = hamiltonian(state_proj)
+            LEFT_conn = state_proj.copy()  # total projector is Hermitean
 
-        RIGHT = self._initial_state()
-
-
-        grads = []
-        numerators = []
-        numerators_conn = []
-        for idx, layer in enumerate(self.unitaries):
-            derivative = RIGHT * 0.0
-            for der in self.derivatives[idx]:
-                derivative += der(RIGHT)
-
-            grad = np.dot(LEFT, derivative) / norm
-            numerators.append(np.dot(LEFT, derivative))
-            grad -= np.dot(LEFT_conn, derivative) / norm * energy
-            numerators_conn.append(np.dot(LEFT_conn, derivative))
-            grads.append(2 * grad.real)
-
-
-            LEFT = LEFT.conj()
-            LEFT_conn = LEFT_conn.conj()
-            for u in self.unitaries[idx]:
-                RIGHT = u(RIGHT)
-                LEFT = u(LEFT)
-                LEFT_conn = u(LEFT_conn)
+            for layer in reversed(self.unitaries_herm):
+                for u_herm in reversed(layer):
+                    LEFT = u_herm(LEFT)
+                    LEFT_conn = u_herm(LEFT_conn)
             LEFT = LEFT.conj()
             LEFT_conn = LEFT_conn.conj()
 
-        print('grads exact', time() - t)
-        if N_samples is None:
-            return np.array(grads), None
+            RIGHT = self._initial_state()
+
+
+            grads = []
+            numerators = []
+            numerators_conn = []
+            for idx, layer in enumerate(self.unitaries):
+                derivative = RIGHT * 0.0
+                for der in self.derivatives[idx]:
+                    derivative += der(RIGHT)
+
+                grad = np.dot(LEFT, derivative) / norm
+                numerators.append(np.dot(LEFT, derivative))
+                grad -= np.dot(LEFT_conn, derivative) / norm * energy
+                numerators_conn.append(np.dot(LEFT_conn, derivative))
+                grads.append(2 * grad.real)
+
+
+                LEFT = LEFT.conj()
+                LEFT_conn = LEFT_conn.conj()
+                for u in self.unitaries[idx]:
+                    RIGHT = u(RIGHT)
+                    LEFT = u(LEFT)
+                    LEFT_conn = u(LEFT_conn)
+                LEFT = LEFT.conj()
+                LEFT_conn = LEFT_conn.conj()
+
+            print('grads exact', time() - t)
+            if N_samples is None:
+                return np.array(grads), None
 
         derivatives_sampling = utils.compute_energy_der_sample(self.__call__(), self.der_states, hamiltonian, projector, N_samples)
         norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples)
@@ -377,7 +380,9 @@ class SU2_symmetrized(Circuit):
             print('connectivity', i, numerators_conn[i].real * 2, norm_plus - norm_minus, norm_plus_sample - norm_minus_sample)
 
         '''
-        return np.array(grads), grad_sampling
+        if self.config.test:
+            return np.array(grads), grad_sampling
+        return None, grad_sampling
 
 
     def get_metric_tensor(self, projector, N_samples):
@@ -463,6 +468,7 @@ class SU2_symmetrized(Circuit):
 
         MT_sample, connectivity = self.get_metric_tensor_sampling(projector, N_samples)
         norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples)
+        self.norm = norm_sampling
         #print(np.save('test_MT.npy', MT_sample))
         #assert np.allclose(MT_sample, MT_sample.conj().T)
         #for i in range(MT.shape[0]):
@@ -479,25 +485,32 @@ class SU2_symmetrized(Circuit):
 
     def get_metric_tensor_sampling(self, projector, N_samples):
         ### get states ###
-        self.der_states = []
-        new_params = self.params.copy()
+        #new_params = self.params.copy()
 
         t = time()
+
+        self.der_states = np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
         for i in range(len(self.params)):
-            new_params[i] += np.pi / 2.
-            self.set_parameters(new_params)
-            self.der_states.append(self.__call__(from_idx=i))
-            new_params[i] -= np.pi / 2.
-        self.set_parameters(new_params)
+            self.der_states = self.unitaries[i][0](self.der_states)
+            self.der_states[..., i] = self.derivatives[i][0](np.ascontiguousarray(self.der_states[..., i]))
+
+        
+
+        #for i in range(len(self.params)):
+        #    new_params[i] += np.pi / 2.
+        #    self.set_parameters(new_params)
+        #    self.der_states.append(self.__call__(from_idx=i))
+        #    new_params[i] -= np.pi / 2.
+        #self.set_parameters(new_params)
 
 
         print('obtain states for MT ', time() - t)
-        metric_tensor = utils.compute_metric_tensor_sample(self.der_states, projector, N_samples)
-        metric_tensor = metric_tensor + metric_tensor.conj().T
-        metric_tensor -= np.diag(np.diag(metric_tensor)) / 2.
+        metric_tensor = utils.compute_metric_tensor_sample(np.array(self.der_states).T, projector, N_samples)
+        #metric_tensor = metric_tensor + metric_tensor.conj().T
+        #metric_tensor -= np.diag(np.diag(metric_tensor)) / 2.
 
-        connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=0.) + \
-                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states, projector, N_samples, theta=-1)
+        connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=0.) + \
+                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=-1)
         return metric_tensor, connectivity
 
 
@@ -521,6 +534,8 @@ class SU2_symmetrized(Circuit):
                 state = op(state)
         else:
             for idx, pair in enumerate(self.dimerization):
+                if idx == len(self.dimerization) - 1:
+                    break
                 if idx < len(self.dimerization) - 2:
                     op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 else:
@@ -541,6 +556,7 @@ class SU2_symmetrized(Circuit):
             _, _, norm = self.basis.state_info(x)
             state_su2[i] = state[self.basis_bare.index(x)] / norm
 
+
         assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
         assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.n_qubits, self.spin * (self.spin + 1) * 4.)
         
@@ -552,7 +568,7 @@ class SU2_symmetrized(Circuit):
         P_ijun = (SSun + np.eye(4)) / 2.
 
 
-        for n_layers in range(1):            
+        for n_layers in range(1):
             for shid, shift in enumerate([(0, 0), (1, 1), (1, 0), (0, 1)]):
                 for pair in [(0, 4), (1, 5), (2, 6), (3, 7), (8, 12), (9, 13), (10, 14), (11, 15)] if shid < 2 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
                     i, j = pair
@@ -598,7 +614,8 @@ class SU2_symmetrized(Circuit):
                     layers.append(deepcopy(layer))
                 '''
                 
-            return layers
+        return layers
+
             
 
     def _initialize_parameters(self):
@@ -612,6 +629,10 @@ class SU2_symmetrized(Circuit):
             parameters_log = open(os.path.join(self.config.path_to_logs, 'parameters_log.dat'), 'r') 
             last_line = parameters_log.readlines()[-1]
             arr = 'np.array([' + last_line + '])'
+
+            lambda_log = open(os.path.join(self.config.path_to_logs, 'lambda_log.dat'), 'r')
+            last_line = lambda_log.readlines()[-1]
+            self.lamb = float(last_line)
             return eval(arr)
         except:
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
