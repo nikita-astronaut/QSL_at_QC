@@ -46,16 +46,16 @@ class Hamiltonian(object):
 
         self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 12, dtype=np.float64)
-        #print(repr(energy - self.energy_renorm))
+        energy, ground_state = ls.diagonalize(self._matrix, k = 12, dtype=np.complex128)
+        print(repr(energy - self.energy_renorm))
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
         #    for s in self.permutations:
         #        print(np.dot(state.conj(), state[s]))
-        ### DEBUG
+        ## DEBUG
         
         print()
-        #print(energy - self.energy_renorm)
+        print(energy - self.energy_renorm)
         spins = []
         all_bonds = []
         for i in range(self.n_qubits):
@@ -100,10 +100,12 @@ class Hamiltonian(object):
         #exit(-1)
         return
 
-    def __call__(self, bra, n_term = None):
+    def __call__(self, bra, n_term = None, vector=True):
         if n_term is None:
             return self._matrix(bra)
-        return self._terms[n_term][0](bra), self._terms[n_term][1]
+        if vector:
+            return self._terms[n_term][0](bra)
+        return self._terms[n_term][1]
 
 
     def _get_Hamiltonian_matrix(self, **kwargs):

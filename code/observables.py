@@ -133,6 +133,7 @@ class Observables(object):
         self.exact_force_SR_log = open(os.path.join(self.path_to_logs, 'exact_force_SR_log.dat'), openmode)
 
         self.parameters_log = open(os.path.join(self.path_to_logs, 'parameters_log.dat'), openmode)
+        self.lambda_log = open(os.path.join(self.path_to_logs, 'lambda_log.dat'), openmode)
 
         self.observables = config.observables
         self.hamiltonian = hamiltonian
@@ -184,6 +185,10 @@ class Observables(object):
             self.parameters_log.write('{:.4f}, '.format(p))
         self.parameters_log.write('\n')
         self.parameters_log.flush()
+
+        lamb = self.circuit.lamb
+        self.lambda_log.write('{:.4f}\n'.format(lamb))
+        self.lambda_log.flush()
 
 
         #### compute energy ###
