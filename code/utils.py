@@ -3,6 +3,7 @@ import sys
 import numpy as np
 from time import time
 import lattice_symmetries as ls
+import qiskit
 
 def index_to_spin(index, number_spins = 16):
     return (((index.reshape(-1, 1).astype(np.int64) & (1 << np.arange(number_spins).astype(np.int64)))) > 0)
@@ -327,8 +328,6 @@ def get_symmetry_unique_bonds(bonds, permutations):
 
 def compute_energy_sample(state, hamiltonian, projector, N_samples):
     t = time()
-    #state_ancilla = np.zeros(2 * len(state), dtype=np.complex128)
-    #indexes = np.arange(len(state_ancilla))
 
     state0_proj_inv = np.array([projector(state, proj_idx, inv=True) for proj_idx in range(projector.nterms)]).conj()
 
@@ -336,44 +335,22 @@ def compute_energy_sample(state, hamiltonian, projector, N_samples):
     states_ham = np.array([hamiltonian(state, ham_idx) for ham_idx in range(hamiltonian.nterms)])
 
     ps = (0.5 - np.dot(state0_proj_inv, states_ham.T) / 2.).real
-    #ps = [(0.5 - np.vdot(state0_proj_inv[proj_idx], state_ham) / 2.).real for proj_idx in range(projector.nterms)]
     N_ups = np.random.binomial(N_samples, ps)
     energy = np.sum((1 - 2 * N_ups / N_samples).dot(js))
-    '''
-    #for proj_idx in range(projector.nterms):
-        #    state_proj = projector(state_ham, proj_idx)
-        #    #state_ancilla[:len(state)] = (state + state_proj) / 2.
-        #    #state_ancilla[len(state):] = (state - state_proj) / 2.
-        #    p = np.linalg.norm((state - state_proj) / 2.) ** 2
-        #    N_up = np.random.binomial(N_samples, p)
-        #    #idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
-        #    #np.random.seed(0)
-        #    #idxs = np.random.randint(0, len(state_ancilla), size = N_samples)
- 
-        #    #N_up = np.sum(idxs >= len(state))
-
-        #    energies.append((1 - 2 * N_up / N_samples) * j)
-        #    #print(energies[-1])
-        #print('energy_projected: ', np.sum(energies[-projector.nterms:]), 'idx', ham_idx, j)
-    '''
     print('sample estimation of E(theta) = ', time() - t)
     return energy / projector.nterms
 
 
 def compute_energy_sample_symmetrized(state, hamiltonian, projector, N_samples):
     bond_groups, idxs_groups = get_symmetry_unique_bonds(hamiltonian.bonds, projector.maps)
-    #print(bond_groups, idxs_groups)
 
     t = time()
     energies = []
     state_ancilla = np.zeros(2 * len(state), dtype=np.complex128)
     indexes = np.arange(len(state_ancilla))
     
-    #np.random.seed(0)
-    #idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
     for idxs_group in idxs_groups:
         ham_idx = idxs_group[0]
-        #print(idxs_group)
         state_ham, j = hamiltonian(state, ham_idx)
         for proj_idx in range(projector.nterms):
             state_proj = projector(state_ham, proj_idx)
@@ -381,14 +358,10 @@ def compute_energy_sample_symmetrized(state, hamiltonian, projector, N_samples):
             state_ancilla[len(state):] = (state - state_proj) / 2.
 
             idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples * 5)
-            #np.random.seed(0)
-            #idxs = np.random.randint(0, len(state_ancilla), size = N_samples)
   
             N_up = np.sum(idxs >= len(state))
 
             energies.append((1 - 2 * N_up / N_samples / 5.) * j * len(idxs_group))
-            #print(energies[-1] / len(idxs_group))
-        #print('energy_projected: ', np.sum(energies[-projector.nterms:]), 'idx', ham_idx, j)
 
     print('sample estimation of E(theta) = ', time() - t)
     return np.sum(energies) / projector.nterms
@@ -401,7 +374,6 @@ def compute_metric_tensor_sample(states, projector, N_samples):
     t_samp = 0.
 
     ctr = 0
-    #thetafull = np.exp(1.0j * theta * np.pi / 2.)
     ps_real = np.empty((len(states), len(states), projector.nterms), dtype=np.float64)
     ps_imag = np.empty((len(states), len(states), projector.nterms), dtype=np.float64)
     
@@ -409,14 +381,9 @@ def compute_metric_tensor_sample(states, projector, N_samples):
         z = time()
         states_j_proj = projector(states, proj_idx).conj() # np.array([projector(states[j], proj_idx) for j in range(len(states))]).conj(
         t_proj += time() - z
-        #for j in range(len(states)):
-        #    z = time()
-        #    states_j_proj = projector(states[j], proj_idx)# * thetafull
-        #    t_proj += time() - z
 
         z = time()
         ps = 0.5 - np.dot(states, states_j_proj.T).conj() / 2.
-        #ps = [(0.5 - np.vdot(states[i], state_j_proj) / 2.) for i in range(j, len(states))]
         ps_real[..., proj_idx] = ps.real
         ps_imag[..., proj_idx] = ps.imag + 0.5
 
@@ -425,12 +392,9 @@ def compute_metric_tensor_sample(states, projector, N_samples):
     z = time()
     N_ups_reals = np.random.binomial(N_samples, np.clip(ps_real, a_min=0., a_max=1.))
     N_ups_imags = np.random.binomial(N_samples, np.clip(ps_imag, a_min=0., a_max=1.))
-    #    N_ups_reals = N_ups[:len(ps)]
-    #    N_ups_imags = N_ups[len(ps):]
     t_samp += time() - z
 
 
-    #MT[j:, j] += (1 - 2 * N_ups_reals / N_samples) + 1.0j * (1 - 2 * N_ups_imags / N_samples)
     MT = (1 - 2 * N_ups_reals / N_samples).mean(axis=-1) + 1.0j * (1 - 2 * N_ups_imags / N_samples).mean(axis=-1)
     print('sample estimation of MT(theta) = ', time() - t)
     print(t_proj, t_norm, t_samp)
@@ -439,9 +403,6 @@ def compute_metric_tensor_sample(states, projector, N_samples):
 
 def compute_connectivity_sample(state0, states, projector, N_samples, theta=0.):
     t = time()
-    #connectivity = np.zeros(len(states), dtype=np.complex128)
-    #state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
-    #indexes = np.arange(len(state_ancilla))
     thetafull = np.exp(1.0j * np.pi / 2. * theta)
 
     state0_proj_inv = np.array([projector(state0, proj_idx, inv=True) / thetafull for proj_idx in range(projector.nterms)]).conj()
@@ -450,20 +411,12 @@ def compute_connectivity_sample(state0, states, projector, N_samples, theta=0.):
     ps = (0.5 - np.dot(state0_proj_inv, states.T) / 2.).real
     N_ups = np.random.binomial(N_samples, ps)
     connectivity = np.sum((1 - 2 * N_ups / N_samples), axis = 0)
-    #for i in range(len(states)):
-    #
-    #    ps = [(0.5 - np.vdot(state0_proj_inv[proj_idx], states[i]) / 2.).real for proj_idx in range(projector.nterms)]
-    #    N_ups = np.random.binomial(N_samples, ps)
-    #    connectivity[i] += np.sum((1 - 2 * N_ups / N_samples))
 
     print('sample estimation of connectivity(theta) = ', time() - t)
     return connectivity / projector.nterms
 
 def compute_energy_der_sample(state0, states, hamiltonian, projector, N_samples, theta=0.):
     t = time()
-    #der = np.zeros(states.shape[1], dtype=np.complex128)
-    #state_ancilla = np.zeros(2 * len(states[0]), dtype=np.complex128)
-    #indexes = np.arange(len(state_ancilla))
     time_sampling = 0.
     t_proj = 0.
     t_ham = 0.
@@ -483,17 +436,9 @@ def compute_energy_der_sample(state0, states, hamiltonian, projector, N_samples,
         j = hamiltonian(None, ham_idx, vector=False)
         js.append(j)
         t_ham += time() - z
-        #js = []
-        #for ham_idx in range(hamiltonian.nterms):
-        #    z = time()
-        #    states_ham[ham_idx] = hamiltonian(states[i], ham_idx)
-        #    js.append(hamiltonian(states[i], ham_idx, vector=False))
-        #    t_ham += time() - z
 
-        #js = np.array(js)
         z = time()
         ps[..., ham_idx] = 0.5 - np.dot(state0_proj_inv, states_ham).real / 2.
-        #ps = [(0.5 - np.vdot(state0_proj_inv[proj_idx], state_ham) / 2.).real for proj_idx in range(projector.nterms)]
         t_norm += time() - z
 
     z = time()
@@ -505,34 +450,56 @@ def compute_energy_der_sample(state0, states, hamiltonian, projector, N_samples,
     print(t_proj, t_ham, t_samp, t_norm)
     print('sample estimation of energy der numerator(theta) = ', time() - t, 'sampling:', time_sampling)
     return der / projector.nterms
-    '''
-        
-            for proj_idx in range(projector.nterms):
-                #z = time()
-                #state_i_proj = projector(state_ham, proj_idx)
-                #t_proj += time() - z
-                z = time()
-                #ptest = np.linalg.norm(state0 - state_i_proj) ** 2 / 4.
-                #p1 = np.linalg.norm(state0_proj_inv[proj_idx] - state_ham) ** 2 / 4.
-                p = (0.5 - np.vdot(state0_proj_inv[proj_idx], state_ham) / 2.).real
-                #print(p1, p.real)
-                #assert np.isclose(p1, p.real)
-                #assert np.isclose(ptest, p)
-                t_norm += time() - z
-                z = time()
-                N_up = np.random.binomial(N_samples, p)
-                t_samp += time() - z
-                #state_ancilla[:len(state_i_proj)] = (state0 + np.exp(1.0j * theta) * state_i_proj) / 2.
-                #state_ancilla[len(state_i_proj):] = (state0 - np.exp(1.0j * theta) * state_i_proj) / 2.
 
-                #ts = time()
-                #idxs = np.random.choice(indexes, p=np.abs(state_ancilla) ** 2, replace=True, size=N_samples)
-                #time_sampling += time() - ts
-                #N_up = np.sum(idxs >= len(state0))
 
-                der[i] += (1 - 2 * N_up / N_samples) * j
+def compute_norm_qiskit(circuit, projector, N_samples, noise_model):
+    basis_gates = noise_model.basis_gates
 
-        print('sample estimation of energy der numerator(theta) = ', time() - t, 'sampling:', time_sampling)
-        print(t_proj, t_ham, t_samp, t_norm)
-        return der / projector.nterms
-    '''
+    circ = circuit.init_circuit_qiskit()
+    result = qiskit.execute(circ, qiskit.Aer.get_backend('statevector_simulator'), shots=2 ** 14).result()
+    print(repr(result.get_statevector(circ)))
+
+    circ = circuit.act_dimerization_qiskit(circ)
+    #result = qiskit.execute(circ, qiskit.Aer.get_backend('statevector_simulator'), shots=2 ** 14).result()
+    #return result.get_statevector(circ)
+    circ = circuit.act_psi_qiskit(circ, circuit.params)
+
+    projector_circuits = []
+    for idx, cycl in enumerate(projector.cycl):
+        current_circ = circ.copy('circuit_projector_{:d}'.format(idx))
+
+        pair_permutations = []
+        for loop in cycl:
+            if len(loop) == 1:
+                continue
+
+            for i in range(1, len(loop)):
+                pair_permutations.append((loop[0], loop[i]))
+
+
+        current_circ = circuit.act_permutation_qiskit(current_circ, pair_permutations)
+
+        #result = qiskit.execute(current_circ, qiskit.Aer.get_backend('statevector_simulator'), shots=2 ** 14).result()
+        #return result.get_statevector(current_circ)
+
+        current_circ = circuit.act_psi_qiskit(current_circ, circuit.params, inverse=True)
+        current_circ = circuit.act_dimerization_qiskit(current_circ, inverse=True)
+        current_circ.measure(np.arange(circuit.n_qubits), np.arange(circuit.n_qubits))
+
+        projector_circuits.append(current_circ.copy())
+
+    t = time()
+    result = qiskit.execute(projector_circuits, qiskit.Aer.get_backend('qasm_simulator'), shots=2 ** 4,
+                            basis_gates=None,
+                            noise_model=noise_model).result()
+    print('noisy simulation with quasm took', time() - t)
+
+    #print(repr(result.get_statevector(projector_circuits[0])))
+    survivals = []
+    for i in range(len(projector.cycl)):
+        res = result.get_counts(i).get('0' * circuit.n_qubits)
+        survivals.append(res if res is not None else 0)
+    print(survivals)
+    return np.mean(np.sqrt(np.array(survivals) / 2 ** 4))
+
+

@@ -22,7 +22,7 @@ class ProjectorFull(Projector):
         self.n_qubits = n_qubits
         self.basis_size = basis.number_states
 
-        self.maps, self.permutations, self.characters = self._init_projector(generators, eigenvalues, degrees)
+        self.maps, self.permutations, self.characters, self.cycl = self._init_projector(generators, eigenvalues, degrees)
         self.permutations_inv = [np.argsort(perm) for perm in self.permutations]
         self.nterms = len(self.permutations)
 
@@ -88,7 +88,32 @@ class ProjectorFull(Projector):
                     total -= 1
         print('unique', total)
 
-        return maps, permutations, characters
+
+        def cycles(perm):
+            remain = set(perm)
+            result = []
+            while len(remain) > 0:
+                n = remain.pop()
+                cycle = [n]
+                while True:
+                    n = perm[n]
+                    if n not in remain:
+                        break
+                    remain.remove(n)
+                    cycle.append(n)
+                result.append(cycle)
+            return result
+
+
+        #for idx, p in enumerate(maps):
+        #    print(p,  sum([len(l) - 1 for l in cycles(p)]))
+
+        cycl = []
+        for idx, p in enumerate(maps):
+            map_swaps = []
+            cycl.append(cycles(p))
+
+        return maps, permutations, characters, cycl
 
 
 

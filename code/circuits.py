@@ -7,6 +7,8 @@ import lattice_symmetries as ls
 import scipy
 import utils
 from time import time
+import qiskit
+
 
 sz = np.array([[1, 0], \
                [0, -1]])
@@ -22,6 +24,9 @@ s0 = np.eye(2)
 
 SS = np.kron(sx, sx) + np.kron(sy, sy) + np.kron(sz, sz)
 SSun = -np.kron(sx, sx) + -np.kron(sy, sy) + np.kron(sz, sz)
+
+
+
 
 class Circuit(object):
     def __init__(self, n_qubits, basis, config, unitary, **kwargs):
@@ -214,12 +219,6 @@ class SU2_symmetrized(Circuit):
         self.dimerization = config.dimerization
         self.lamb = 1.
         super().__init__(Lx * Ly * subl, basis, config, unitary)
-        #self.tr_x = utils.get_x_symmetry_map(self.Lx, self.Ly)
-        #self.tr_y = utils.get_y_symmetry_map(self.Lx, self.Ly)
-        #self.Cx = utils.get_Cx_symmetry_map(self.Lx, self.Ly)
-        #self.Cy = utils.get_Cy_symmetry_map(self.Lx, self.Ly)
-        
-        
 
         # init initial state of the circuit
         all_bonds = []
@@ -338,48 +337,6 @@ class SU2_symmetrized(Circuit):
 
         grad_sampling = (derivatives_sampling / norm_sampling - self.connectivity_sampling * energy_sampling / norm_sampling).real * 2.
 
-
-
-        #for i in range(len(self.params)):
-        #    print((derivatives_sampling[i] / norm_sampling).real * 2., (numerators[i] / norm).real * 2., '|', \
-        #           (self.connectivity_sampling[i] * energy_sampling / norm_sampling).real * 2., (numerators_conn[i] / norm * energy).real * 2.)
-        #    print(grad_sampling[i], np.array(grads)[i])
-        #print('energy sampling:', energy_sampling / norm_sampling - 33, 'energy exact', energy - 33)
-        #exit(-1)
-
-
-        ### sampling testing ###
-        '''
-        new_params = self.params.copy()
-        for i in range(len(self.params)):
-            new_params[i] += np.pi / 4.
-            self.set_parameters(new_params)
-            state = self.__call__()
-            state_proj = projector(state)
-
-            energy_plus = np.dot(np.conj(state), hamiltonian(state_proj))
-            norm_plus = np.dot(np.conj(state), state_proj)
-            
-            energy_plus_sample = utils.compute_energy_sample(self.__call__(), hamiltonian, projector, N_samples)
-            norm_plus_sample = utils.compute_norm_sample(self.__call__(), projector, N_samples)
-
-            new_params[i] -= np.pi / 2.
-            self.set_parameters(new_params)
-            energy_minus_sample = utils.compute_energy_sample(self.__call__(), hamiltonian, projector, N_samples)
-            norm_minus_sample = utils.compute_norm_sample(self.__call__(), projector, N_samples)
-            state = self.__call__()
-            state_proj = projector(state)
-
-            energy_minus = np.dot(np.conj(state), hamiltonian(state_proj))
-            norm_minus = np.dot(np.conj(state), state_proj)
-
-            new_params[i] += np.pi / 4.
-            self.set_parameters(new_params)
-
-            print('energy derivative', i, numerators[i].real * 2., energy_plus - energy_minus, energy_plus_sample - energy_minus_sample)
-            print('connectivity', i, numerators_conn[i].real * 2, norm_plus - norm_minus, norm_plus_sample - norm_minus_sample)
-
-        '''
         if self.config.test:
             return np.array(grads), grad_sampling
         return None, grad_sampling
@@ -464,29 +421,41 @@ class SU2_symmetrized(Circuit):
             print('MT exact', time() - t)
             if N_samples is None:
                 return MT, der_i, None, None
-        # MT -= np.einsum('i,j->ij', der_i.conj(), der_i)
 
         MT_sample, connectivity = self.get_metric_tensor_sampling(projector, N_samples)
         norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples)
         self.norm = norm_sampling
-        #print(np.save('test_MT.npy', MT_sample))
-        #assert np.allclose(MT_sample, MT_sample.conj().T)
-        #for i in range(MT.shape[0]):
-        #    for j in range(MT.shape[1]):
-        #        print(MT[i, j] * norm, MT_sample[i, j])
-        
-        #for i in range(connectivity.shape[0]):
-        #    print(der_i[i] * norm, connectivity[i])
 
-        
+
+
+        ### DEBUG ###
+        if self.config.qiskit:
+            norm_qiskit = utils.compute_norm_qiskit(self, projector, self.config.N_samples, self.config.noise_model)
+            
+
+            #def index_to_spin(index, number_spins = 16):
+            #    return (((index.reshape(-1, 1) & (1 << np.arange(number_spins)))) > 0)
+
+
+            #def spin_to_index(spin, number_spins = 16):
+            #    a = 2 ** np.arange(number_spins)
+            #    return np.einsum('ij,j->i', spin, a)
+
+            #all_confs = np.arange(2 ** self.n_qubits)
+            #mapping = spin_to_index(index_to_spin(all_confs)[:, ::-1])
+            
+            #print(np.vdot(norm_qiskit, projector(self.__call__(), 67, inv=True)))
+            print(np.vdot(projector(self.__call__()), self.__call__()), self.norm, norm_qiskit)
+        exit(-1)
+        ### STOP DEBUG ###
+
+
+
         if self.config.test:
             return MT, der_i, MT_sample / norm_sampling, connectivity / norm_sampling
         return None, None, MT_sample / norm_sampling, connectivity / norm_sampling
 
     def get_metric_tensor_sampling(self, projector, N_samples):
-        ### get states ###
-        #new_params = self.params.copy()
-
         t = time()
 
         self.der_states = np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
@@ -495,19 +464,8 @@ class SU2_symmetrized(Circuit):
             self.der_states[..., i] = self.derivatives[i][0](np.ascontiguousarray(self.der_states[..., i]))
 
         
-
-        #for i in range(len(self.params)):
-        #    new_params[i] += np.pi / 2.
-        #    self.set_parameters(new_params)
-        #    self.der_states.append(self.__call__(from_idx=i))
-        #    new_params[i] -= np.pi / 2.
-        #self.set_parameters(new_params)
-
-
         print('obtain states for MT ', time() - t)
         metric_tensor = utils.compute_metric_tensor_sample(np.array(self.der_states).T, projector, N_samples)
-        #metric_tensor = metric_tensor + metric_tensor.conj().T
-        #metric_tensor -= np.diag(np.diag(metric_tensor)) / 2.
 
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=0.) + \
                         1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=-1)
@@ -598,22 +556,6 @@ class SU2_symmetrized(Circuit):
 
                     layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
                     layers.append(deepcopy(layer))
-                '''
-                for pair in [(0, 4), (1, 5), (2, 6), (3, 7), (8, 12), (9, 13), (10, 14), (11, 15)] if shid >= 2 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
-                    i, j = pair
-                    xi, yi = i % self.Lx, i // self.Ly
-                    xj, yj = j % self.Lx, j // self.Ly
-
-                    xi = (xi + shift[0]) % self.Lx
-                    xj = (xj + shift[0]) % self.Lx
-                    yi = (yi + shift[1]) % self.Ly
-                    yj = (yj + shift[1]) % self.Ly
-                    ii, jj = xi + yi * self.Ly, xj + yj * self.Ly
-
-                    layer = [((ii, jj), P_ij if self.unitary[ii, jj] == +1 else P_ijun)]
-                    layers.append(deepcopy(layer))
-                '''
-                
         return layers
 
             
@@ -661,6 +603,89 @@ class SU2_symmetrized(Circuit):
             self.unitaries_herm.append(unitaries_herm_layer)
             self.derivatives.append(derivatives_layer)
         return
+
+    def init_circuit_qiskit(self):
+        return qiskit.QuantumCircuit(self.n_qubits, self.n_qubits)  # survival-rate scheme: measuring all registers
+
+
+    def act_permutation_qiskit(self, circ, pair_permutations):
+        '''
+            acts product of pair SWAP gates on the state
+        '''
+
+        for pair in pair_permutations:
+            circ.swap(pair[0], pair[1])
+
+        return circ
+
+
+    def act_dimerization_qiskit(self, circ, inverse=False):
+        '''
+            acts D on the bare state |0> using the provided patterm
+        '''
+
+        assert self.spin == 0  # only the zero-spin-version so far
+        if inverse:
+            for pair in self.dimerization:
+                i, j = pair
+
+                circ.cx(i, j)
+                circ.h(i)
+                circ.x(j)
+                circ.x(i)
+
+            return circ
+
+        for pair in self.dimerization:
+            i, j = pair
+
+            circ.x(i)
+            circ.x(j)
+
+            circ.h(i)
+            circ.cx(i, j)
+    
+
+        return circ
+
+
+    def act_psi_qiskit(self, circ, parameters, inverse=False):
+        '''
+            qubits has been initialized elsewhere;
+            acts U(parameters) on the state using SWAPe gates
+        '''
+
+        for p, l in zip(reversed(parameters), reversed(self.layers)) if inverse else zip(parameters, self.layers):
+            angle = -p if not inverse else p
+            pair = l[0][0]
+
+            i, j = pair
+
+
+            eswap_op = qiskit.quantum_info.Operator([[np.exp(-1.0j * angle), 0, 0, 0],
+                                                     [0, np.cos(angle), -1.0j * np.sin(angle), 0],
+                                                     [0, -1.0j * np.sin(angle), np.cos(angle), 0],
+                                                     [0, 0, 0, np.exp(-1.0j * angle)]])
+
+            '''
+            circ.cx(i, j)
+
+            circ.cu3(angle * 2, -np.pi / 2, np.pi / 2, i, j)
+
+            circ.x(j)
+
+            circ.cx(j, i)
+            circ.cu1(-angle, j, i)
+            circ.cx(j, i)
+            circ.cu1(-angle, j, i)
+
+            circ.x(j)
+
+            circ.cx(i, j)
+            '''
+            circ.unitary(eswap_op, [i, j], label='eswap')
+
+        return circ
 
 
 class SU2_symmetrized_hexagon(SU2_symmetrized):

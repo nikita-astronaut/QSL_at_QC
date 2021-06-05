@@ -140,20 +140,26 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
             #assert np.allclose(MT, MT.T)
 
 
-            s, u = np.linalg.eigh(MT)
-            #print('s sampled:', s)
-            #print('u sampled:', u.T)
-            MT_inv = np.zeros(MT.shape)
-            keep_lambdas = (s / s.max()) > config.SR_eig_cut
-            for lambda_idx in range(len(s)):
-                if not keep_lambdas[lambda_idx]:
-                    continue
-                MT_inv += (1. / s[lambda_idx]) * \
-                        np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
+            if config.reg == 'svd':
+                s, u = np.linalg.eigh(MT)
+                MT_inv = np.zeros(MT.shape)
+                keep_lambdas = (s / s.max()) > config.SR_eig_cut
+                for lambda_idx in range(len(s)):
+                    if not keep_lambdas[lambda_idx]:
+                        continue
+                    MT_inv += (1. / s[lambda_idx]) * \
+                            np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
+            else:
+                MT2 = MT @ MT.T.conj()
+                eigvals, eigstates = np.linalg.eigh(MT2)
+                assert np.all(eigvals > 0)
+                MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT.shape[0])
+                MT_inv = np.linalg.inv(MT)
+                #MT_inv = np.linalg.inv(MT + config.SR_eig_cut * np.eye(MT.shape[0]))
 
             circuit.forces = grads.copy()
             #grads = MT_inv.dot(grads - lambdas[n_iter] * der_one.real)
-            grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
+            grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))  # FIXME: shall we include this to the SR?
             circuit.forces_SR = grads.copy()
 
         if config.test or config.N_samples is None:
@@ -162,19 +168,18 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
 
             #assert np.allclose(MT_exact, MT_exact.T)
 
-            s, u = np.linalg.eigh(MT_exact)
-            #print('s exact:', s)
-            #print('u exact:', u.T)
+            if config.reg == 'svd':
+                s, u = np.linalg.eigh(MT_exact)
 
-            MTe_inv = np.zeros(MT_exact.shape)
-            keep_lambdas = (s / s.max()) > config.SR_eig_cut
-            #print(keep_lambdas)
-            #print(u)
-            for lambda_idx in range(len(s)):
-                if not keep_lambdas[lambda_idx]:
-                    continue
-                MTe_inv += (1. / s[lambda_idx]) * \
-                          np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
+                MTe_inv = np.zeros(MT_exact.shape)
+                keep_lambdas = (s / s.max()) > config.SR_eig_cut
+                for lambda_idx in range(len(s)):
+                    if not keep_lambdas[lambda_idx]:
+                        continue
+                    MTe_inv += (1. / s[lambda_idx]) * \
+                              np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
+            else:
+                MTe_inv = np.linalg.inv(MTe + config.SR_eig_cut * np.eye(MTe.shape[0]))
             #assert np.allclose(MTe_inv, np.linalg.inv(MT_exact))
 
             circuit.forces_exact = grads_exact.copy()
@@ -198,7 +203,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
             #exit(-1)
         if config.N_samples is not None:
             new_params = (cur_params - lr * grads).real
-            circuit.lamb -= (circuit.norm - config.target_norm) * config.Z * lr
+            if config.lagrange:
+                circuit.lamb -= (circuit.norm - config.target_norm) * config.Z * lr
         else:
             new_params = (cur_params - lr * grads_exact).real
         if config.test:
