@@ -17,12 +17,13 @@ class Projector(object):
         
 
 class ProjectorFull(Projector):
-    def __init__(self, n_qubits, su2, basis, generators, eigenvalues, degrees):
+    def __init__(self, Hbonds, n_qubits, su2, basis, generators, eigenvalues, degrees):
         self.basis = basis
         self.n_qubits = n_qubits
         self.basis_size = basis.number_states
+        self.Hbonds = Hbonds
 
-        self.maps, self.permutations, self.characters, self.cycl = self._init_projector(generators, eigenvalues, degrees)
+        self.maps, self.permutations, self.characters, self.cycl, self.all_pair_permutations, self.all_double_permutations = self._init_projector(generators, eigenvalues, degrees)
         self.permutations_inv = [np.argsort(perm) for perm in self.permutations]
         self.nterms = len(self.permutations)
 
@@ -89,6 +90,8 @@ class ProjectorFull(Projector):
         print('unique', total)
 
 
+
+
         def cycles(perm):
             remain = set(perm)
             result = []
@@ -105,15 +108,53 @@ class ProjectorFull(Projector):
             return result
 
 
-        #for idx, p in enumerate(maps):
-        #    print(p,  sum([len(l) - 1 for l in cycles(p)]))
-
         cycl = []
         for idx, p in enumerate(maps):
             map_swaps = []
             cycl.append(cycles(p))
 
-        return maps, permutations, characters, cycl
+
+        all_pair_permutations = []
+        for c in cycl:
+            pair_permutations = []
+
+            for loop in c:
+                if len(loop) == 1:
+                    continue
+
+                for i in reversed(range(1, len(loop))):
+                    pair_permutations.append((loop[0], loop[i]))
+            all_pair_permutations.append(deepcopy(pair_permutations))
+
+
+
+        all_double_permutations = []
+        '''
+        for pair_permutations, permutation, m in zip(all_pair_permutations, permutations, maps):
+            double_permutations = []
+            for separator in range(len(pair_permutations)):
+                perm_before = np.arange(self.n_qubits)
+                perm_after = np.arange(self.n_qubits)
+
+                for pair in pair_permutations[:separator]:
+                    perm_before[pair[0]], perm_before[pair[1]] = perm_before[pair[1]], perm_before[pair[0]]
+                for pair in pair_permutations[separator:]:
+                    perm_after[pair[0]], perm_after[pair[1]] = perm_after[pair[1]], perm_after[pair[0]]
+                #perm_before = np.argsort(perm_before)
+                #perm_after = np.argsort(perm_after)
+
+                permutation_before = np.argsort(utils.spin_to_index(utils.index_to_spin(self.basis.states, number_spins = self.n_qubits)[:, perm_before], number_spins = self.n_qubits)) 
+                permutation_after = np.argsort(utils.spin_to_index(utils.index_to_spin(self.basis.states, number_spins = self.n_qubits)[:, perm_after], number_spins = self.n_qubits))
+                double_permutations.append((permutation_before.copy(), permutation_after.copy()))
+
+                assert np.allclose(perm_before[perm_after], m)
+                assert np.allclose(permutation, permutation_before[permutation_after])
+            all_double_permutations.append(deepcopy(double_permutations))
+        '''
+
+
+
+        return maps, permutations, characters, cycl, all_pair_permutations, all_double_permutations
 
 
 

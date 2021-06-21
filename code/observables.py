@@ -192,16 +192,17 @@ class Observables(object):
 
 
         #### compute energy ###
-        state = self.circuit()
+        state = self.circuit(noisy=False)
         state_proj = self.projector(state)
-        norm = np.dot(state.conj(), state_proj)
-        energy = (np.dot(np.conj(state), self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm
+        norm = np.vdot(state, state_proj)
+        energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm
         
 
         ### compute fidelity ###
-        state_proj = state_proj / np.sqrt(norm)
-        assert np.isclose(np.dot(state_proj, state_proj.conj()), 1.0)
-        fidelity = np.abs(np.dot(self.hamiltonian.ground_state[0].conj(), state_proj)) ** 2
+        state_proj = state_proj / np.sqrt(np.vdot(state_proj, state_proj))
+        print(norm, np.vdot(state, state))
+        assert np.isclose(np.vdot(state_proj, state_proj), 1.0)
+        fidelity = np.abs(np.vdot(self.hamiltonian.ground_state[0], state_proj)) ** 2
         #for i, j in zip(self.hamiltonian.ground_state[0], state_proj):
         #    print(i, j)
         #print(fidelity)

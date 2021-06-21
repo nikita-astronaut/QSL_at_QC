@@ -44,7 +44,7 @@ class Hamiltonian(object):
         self.basis.build()
         
 
-        self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)
+        self._matrix, self._terms, self.bonds, self.js = self._get_Hamiltonian_matrix(**kwargs)
 
         energy, ground_state = ls.diagonalize(self._matrix, k = 12, dtype=np.complex128)
         print(repr(energy - self.energy_renorm))
@@ -86,7 +86,7 @@ class Hamiltonian(object):
 
         ### finally obtaining the GS in the nonsymmetric basis (provided from config) ###
         self.basis = basis
-        self._matrix, self._terms, self.bonds = self._get_Hamiltonian_matrix(**kwargs)   
+        self._matrix, self._terms, self.bonds, self.j2s = self._get_Hamiltonian_matrix(**kwargs)   
 
         assert np.isclose(np.dot(self._matrix(gs_nonsymm).conj(), gs_nonsymm), energy[idx])
 
@@ -156,8 +156,8 @@ class HeisenbergSquareNNBipartitePBC(Hamiltonian):
 
 class HeisenbergSquare(Hamiltonian):
     def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0., BC='PBC'):
-        assert Lx % 2 == 0  # here we only ocnsider bipartite systems
-        assert Ly % 2 == 0
+        #assert Lx % 2 == 0  # here we only ocnsider bipartite systems
+        #assert Ly % 2 == 0
 
         operator = P_ij
         operator_j2 = P_ij
@@ -211,7 +211,8 @@ class HeisenbergSquare(Hamiltonian):
                ([[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2] if len(bonds_j2) > 0 else []) + \
                ([[ls.Operator(self.basis, [ls.Interaction(operatorun, [bond])]), 2] for bond in bondsun] if len(bondsun) > 0 else []) + \
                ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
-               bonds + bondsun + bonds_j2 + bonds_j2un
+               bonds + bondsun + bonds_j2 + bonds_j2un, \
+               [2] * len(bonds) + [2 * j2] * len(bonds_j2)
 
 
 class HeisenbergHexagon(Hamiltonian):

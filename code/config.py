@@ -22,13 +22,13 @@ class opt_parameters:
         j2 = float(sys.argv[2])
         # n_trial = int(sys.argv[3])
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1l/{:.3f}/'.format(j2)
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1l_4x4_SPSA/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
         #self.start_params = np.array([-0.1829, -0.1500, -0.0237, 0.0310, 0.0318, 0.0596, 0.0199, 0.0376, -0.0676, -0.0636, 0.0466, 0.1005, -0.0078, 0.0068, 0.0091, 0.0050, 0.0587, 0.0307, 0.0567, 0.0376, 0.0538, 0.0110, -0.0175, 0.0552, -0.1326, -0.0185, -0.0123, -0.1392, -0.0766, -0.0766, -0.0808, -0.0775, 0.2917, 0.2877, -0.2865, -0.2896, -0.2872, -0.2722, -0.2835, -0.2828, 0.0344, 0.0151, 0.0196, 0.0359, -0.0801, -0.0836, -0.0830, -0.0788, -0.3887, -0.5589, -0.3637, -0.5764, -0.3460, -0.5901, -0.2157, 1.1598, -0.0107, -0.0085, -0.0113, -0.0083, 0.0425, 0.0371, 0.0048, 0.0043])
 
-        self.target_norm = 0.20 #0.20#0.10#0.20 #0.80
-        self.lagrange = True
+        self.target_norm = 0.5#0.5#0.5 #0.20#0.10#0.20 #0.80
+        self.lagrange = False#True# True
         self.Z = 300.
 
         self.test = False
@@ -39,21 +39,25 @@ class opt_parameters:
         self.su2 = False#True
         self.BC = 'PBC'
         self.spin = 0
+        self.noise = True; assert not (self.noise and self.su2)
+        self.noise_p = 3e-3 #3e-3#3e-3
+
+
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
         
         ### setting up symmetries ###
         self.symmetries = [
-            utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
             
         ]
-        self.eigenvalues = [1, 1, 1, 1]#1, -1, 1]#, 1]
-        self.sectors = [0, 0, 0, 0]#[0, 2, 0]#, 0]  # in Toms notation
-        self.degrees = [4, 4, 4, 2]#[4, 4, 2]#, 2]
+        self.eigenvalues = []#1, 1]#, 1, 1]#, 1, 1]#1, -1, 1]#, 1]
+        self.sectors = []#0, 0]#, 0, 0]#, 0, 0]#[0, 2, 0]#, 0]  # in Toms notation
+        self.degrees = []#4, 2]#, 4, 2]#, 4, 2]#[4, 4, 2]#, 2]
 
         self.unitary_no = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
         self.unitary_neel = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
@@ -86,6 +90,7 @@ class opt_parameters:
 
 
         self.dimerization = [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)] if j2 > 0.7 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
+        #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7)]#, (8, 9), (10, 11), (12, 13)]
         self.circuit = circuits.SU2_symmetrized
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
@@ -113,19 +118,20 @@ class opt_parameters:
 
 
         self.optimizer = optimizers.Optimizer
-        self.algorithm = optimizers.natural_gradiend_descend
-        self.opt_params_dict = {'lr' : 3e-4}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.algorithm = optimizers.SPSA_gradiend_descend # natural_gradiend_descend #SPSA_gradiend_descend
+        self.opt_params_dict = {'lr' : 1e-4}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.SPSA_epsilon = 1e-2; self.max_energy_increase_threshold = 1e-1; self.SPSA_hessian_averages = 3; self.SPSA_gradient_averages = 3
 
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 16 #2 ** 12
-        self.SR_eig_cut = 1e-2#3e-2#1e-2
-        self.SR_diag_reg = 0.#1e-4#3e-2#1e-2
+        self.N_samples = 2 ** 12
+        self.SR_eig_cut = 3e-2
+        self.SR_diag_reg = 0.
 
 
         #### noise parameters ####
-        self.qiskit = True
+        self.qiskit = True # True
         if self.qiskit:
             import qiskit.providers.aer.noise as noise
             self.prob_1 = 1e-4
@@ -142,5 +148,3 @@ class opt_parameters:
 
 
         return
-
-

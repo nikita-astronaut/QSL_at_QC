@@ -41,6 +41,11 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
     #                             ])
     lambdas = 1. * np.ones(100000)
 
+
+    energies = []
+    parameters = []
+
+
     lamb = 0.
     for n_iter in range(n_iter):
         t_iter = time()
@@ -212,8 +217,21 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
             print('forces_exact =', repr(grads_exact))
             #print('current parameters =', repr(new_params))
 
-         
-        circuit.set_parameters(new_params)
+        if config.max_energy_increase_threshold is None:
+            circuit.set_parameters(new_params)
+        else:
+
+            if len(energies) > 0 and circuit.energy > energies[-1] + config.max_energy_increase_threshold:
+                circuit.set_parameters(parameters[-1])
+                print('energy increase over threshold: from', energies[-1] - hamiltonian.energy_renorm, ' to ', circuit.energy - hamiltonian.energy_renorm)
+            else:
+                circuit.set_parameters(new_params)
+
+        energies.append(circuit.energy)
+        parameters.append(circuit.get_parameters())
+
+
+        #circuit.set_parameters(new_params)
 
         obs.write_logs()
         #state = circuit()
@@ -226,6 +244,112 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
         print('iteration took', time() - t_iter)
         print('lambda = {:.3f}'.format(circuit.lamb))
     return circuit
+
+
+
+def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, test = False):
+    circuit, hamiltonian, config, projector = args
+
+    lambdas = 1. * np.ones(100000)
+    MT_smoothed = np.eye(len(circuit.params))
+
+    lamb = 0.
+    energies = []
+    parameters = []
+
+    ## ADAM parameters ##
+    beta1 = 0.9
+    beta2 = 0.99
+    epsilon = 1e-8
+
+    v = None
+    m = None
+
+    for n_iter in range(n_iter):
+        t_iter = time()
+        cur_params = circuit.get_parameters()
+        circuit.fix_noise_model_SPSA()
+        t = time()
+        
+        grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples, 'SPSA')
+        print('get all gradients and M_ij', time() - t)
+
+
+        
+        #MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
+
+        print('eigenvalues_SPSA', np.linalg.eigh(ij)[0])
+        #print('eigenvalues_exact', np.linalg.eigh(MT_exact)[0])
+
+        #print('grads SPSA', grads)
+        #print('grads exact', grads_exact)
+
+        MT_smoothed = MT_smoothed * (n_iter + 1) / (n_iter + 2) + ij / (n_iter + 2)
+        MT2 = MT_smoothed @ MT_smoothed.T.conj()
+        eigvals, eigstates = np.linalg.eigh(MT2)
+        #assert np.all(eigvals > 0)
+        print(eigvals)
+        MT = np.einsum('i,ij,ik->jk', np.sqrt(np.abs(eigvals)), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
+
+        print(np.linalg.eigh(MT)[0])
+        #assert np.all(np.linalg.eigh(MT)[0] > 0)
+        MT_inv = np.linalg.inv(MT)
+
+        print('eigenvalues_regularized_SPSA_inv', np.linalg.eigh(MT_inv)[0])
+
+        '''
+        ### START DEBUG ###
+        MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
+        MT2 = MT_exact @ MT_exact.T.conj()
+        eigvals, eigstates = np.linalg.eigh(MT2)
+        assert np.all(eigvals > 0)
+        MT_exact = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
+
+        #assert np.all(np.linalg.eigh(MT)[0] > 0)
+        MT_exact_inv = np.linalg.inv(MT_exact)
+
+        print('eigenvalues_regularized_exact_inv', np.linalg.eigh(MT_exact_inv)[0])
+
+
+        exit(-1)
+        '''
+
+        ### END DEBUG ###
+
+        circuit.forces = grads.copy()
+
+        
+
+        grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
+        circuit.forces_SR = grads.copy()
+
+        m = grads if m is None else m * beta1 + (1 - beta1) * grads
+        v = np.vdot(grads, grads) if v is None else v * beta2 + (1. - beta2) * np.vdot(grads, grads)
+
+        # grads = m / (np.sqrt(v) + epsilon)
+
+        new_params = (cur_params - lr * grads).real
+        if config.lagrange:
+            circuit.lamb -= (circuit.norm - config.target_norm) * config.Z * lr
+
+
+        if len(energies) > 0 and circuit.energy > energies[-1] + config.max_energy_increase_threshold:
+            circuit.set_parameters(parameters[-1])
+            print('energy increase over threshold: from', energies[-1] - hamiltonian.energy_renorm, ' to ', circuit.energy - hamiltonian.energy_renorm)
+        else:
+            circuit.set_parameters(new_params)
+
+        energies.append(circuit.energy)
+        parameters.append(circuit.get_parameters())
+
+        print('iteration took', time() - t_iter)
+        print('lambda = {:.3f}'.format(circuit.lamb))
+        print('energy from estimation', circuit.energy - hamiltonian.energy_renorm)
+        obs.write_logs()
+    return circuit
+
+
+
 
 def get_all_derivatives(cur_params, circuit, hamiltonian, config, projector):
     return circuit.get_all_derivatives(hamiltonian, projector)
