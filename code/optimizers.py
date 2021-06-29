@@ -328,7 +328,7 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
         m = grads if m is None else m * beta1 + (1 - beta1) * grads
         v = np.vdot(grads, grads) if v is None else v * beta2 + (1. - beta2) * np.vdot(grads, grads)
 
-        # grads = m / (np.sqrt(v) + epsilon)
+        grads = m / (np.sqrt(v) + epsilon)
 
         new_params = (cur_params - lr * grads).real
         if config.lagrange:

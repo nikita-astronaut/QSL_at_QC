@@ -119,13 +119,13 @@ class opt_parameters:
 
         self.optimizer = optimizers.Optimizer
         self.algorithm = optimizers.SPSA_gradiend_descend
-        self.opt_params_dict = {'lr' : 1e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.opt_params_dict = {'lr' : 1e-4}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
         self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = 1e-1; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 12
+        self.N_samples = 2 ** 26
         self.SR_eig_cut = 1e-1
         self.SR_diag_reg = 0.
 
@@ -134,8 +134,8 @@ class opt_parameters:
         self.qiskit = True #True # True
         if self.qiskit:
             import qiskit.providers.aer.noise as noise
-            self.prob_1 = 1e-4
-            self.prob_2 = 1e-3
+            self.prob_1 = 1e-8
+            self.prob_2 = 1e-8
             error_1 = noise.depolarizing_error(self.prob_1, 1)
             error_2 = noise.depolarizing_error(self.prob_2, 2)
 
