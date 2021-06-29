@@ -22,13 +22,13 @@ class opt_parameters:
         j2 = float(sys.argv[2])
         # n_trial = int(sys.argv[3])
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1l_4x4_SPSA/{:.3f}/'.format(j2)
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1l_SPSA_realnoise/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
-        self.mode = 'continue'
-        #self.start_params = np.array([-0.1829, -0.1500, -0.0237, 0.0310, 0.0318, 0.0596, 0.0199, 0.0376, -0.0676, -0.0636, 0.0466, 0.1005, -0.0078, 0.0068, 0.0091, 0.0050, 0.0587, 0.0307, 0.0567, 0.0376, 0.0538, 0.0110, -0.0175, 0.0552, -0.1326, -0.0185, -0.0123, -0.1392, -0.0766, -0.0766, -0.0808, -0.0775, 0.2917, 0.2877, -0.2865, -0.2896, -0.2872, -0.2722, -0.2835, -0.2828, 0.0344, 0.0151, 0.0196, 0.0359, -0.0801, -0.0836, -0.0830, -0.0788, -0.3887, -0.5589, -0.3637, -0.5764, -0.3460, -0.5901, -0.2157, 1.1598, -0.0107, -0.0085, -0.0113, -0.0083, 0.0425, 0.0371, 0.0048, 0.0043])
-
-        self.target_norm = 0.5#0.5#0.5 #0.20#0.10#0.20 #0.80
-        self.lagrange = False#True# True
+        self.mode = 'continue'#preassigned'
+        #self.start_params = np.array([-0.3685, 0.4482, -0.0392, 0.2020, 0.0176, 0.0232, 0.2243, -0.1977, -0.0397, 0.1452, 0.0977, 0.1164, -0.0738, -0.0676, 0.2746, -0.2067, -0.0607, 0.1969, -0.1255, -0.0639, 0.0043, 0.1844, 0.1209, -0.2012, -0.7399, 0.0994, -0.0190, -0.0755, 0.0712, 0.0217, 0.0836, 0.0750, 0.5846, 0.0583, -0.0376, 0.8201, 0.3595, 0.2171, 0.1347, 0.4565, 0.2980, 0.1066, 0.1914, -0.2382, 0.0938, 0.0925, 0.0987, 0.0874, 0.3376, 0.2784, 0.5012, 0.4006, 0.5574, 0.3548, 0.2837, 0.3671, -0.4296, 0.0146, 0.0455, 0.0115, -0.0268, -0.0026, 0.0025, -0.0297,])
+        
+        self.target_norm = 0.3 #0.5#0.5 #0.20#0.10#0.20 #0.80
+        self.lagrange = False#True #False#True# True
         self.Z = 300.
 
         self.test = False
@@ -39,8 +39,8 @@ class opt_parameters:
         self.su2 = False#True
         self.BC = 'PBC'
         self.spin = 0
-        self.noise = True; assert not (self.noise and self.su2)
-        self.noise_p = 3e-3 #3e-3#3e-3
+        self.noise = False; assert not (self.noise and self.su2)
+        self.noise_p = 0.#1e-2#3e-3 #3e-3#3e-3
 
 
         self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
@@ -118,20 +118,20 @@ class opt_parameters:
 
 
         self.optimizer = optimizers.Optimizer
-        self.algorithm = optimizers.SPSA_gradiend_descend # natural_gradiend_descend #SPSA_gradiend_descend
-        self.opt_params_dict = {'lr' : 1e-4}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
-        self.SPSA_epsilon = 1e-2; self.max_energy_increase_threshold = 1e-1; self.SPSA_hessian_averages = 3; self.SPSA_gradient_averages = 3
+        self.algorithm = optimizers.SPSA_gradiend_descend
+        self.opt_params_dict = {'lr' : 1e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = 1e-1; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 
 
         #### stochastic parameters ####
         self.N_samples = 2 ** 12
-        self.SR_eig_cut = 3e-2
+        self.SR_eig_cut = 1e-1
         self.SR_diag_reg = 0.
 
 
         #### noise parameters ####
-        self.qiskit = True # True
+        self.qiskit = True #True # True
         if self.qiskit:
             import qiskit.providers.aer.noise as noise
             self.prob_1 = 1e-4
@@ -141,8 +141,9 @@ class opt_parameters:
 
             # Add errors to noise model
             self.noise_model = noise.NoiseModel()
-            #self.noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3'])
-            self.noise_model.add_all_qubit_quantum_error(error_2, ['swap', 'eswap'])#['cx'])
+            self.noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'h'])
+            self.noise_model.add_all_qubit_quantum_error(error_2, ['swap', 'eswap', 'cx'])
+            self.n_noise_repetitions = 3
 
 
 

@@ -46,7 +46,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
     parameters = []
 
 
-    lamb = 0.
+    circuit.lamb = 0.
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()
@@ -56,6 +56,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
         else:
             grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
         print('get all gradients and M_ij', time() - t)
+        print(np.linalg.eigh(ij)[0])
+        exit(-1)
         #print('grads_exact:', grads_exact)
         #print('grads_sampled:', grads)
 
@@ -268,7 +270,7 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()
-        circuit.fix_noise_model_SPSA()
+        #circuit.fix_noise_model_SPSA()
         t = time()
         
         grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples, 'SPSA')

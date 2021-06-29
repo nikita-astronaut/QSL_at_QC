@@ -579,6 +579,56 @@ def compute_norm_qiskit_hadamardtest(circuit, projector, N_samples, noise_model)
     return np.mean(survivals)
 
 
+
+def compute_energy_qiskit_hadamardtest(circuit, projector, hamiltonian, N_samples, noise_model):
+    circ = circuit.init_circuit_qiskit(ancilla=True)
+    circ.h(circuit.n_qubits)
+    circ = circuit.act_dimerization_qiskit(circ)
+    circ = circuit.act_psi_qiskit(circ, circuit.params)
+
+    projector_circuits = []
+    for idx, cycl in enumerate(projector.cycl):
+        current_circ = circ.copy('circuit_projector_{:d}'.format(idx))
+
+        pair_permutations = projector.all_pair_permutations[idx]
+        current_circ = circuit.act_permutation_qiskit(current_circ, pair_permutations, ancilla=True, ancilla_qubit_idx = circuit.n_qubits)
+
+        for en_idx in range(len(hamiltonian.bonds)):
+            name = 'circuit_projector_{:d}_energy_{:d}'.format(idx, en_idx)
+            bond = hamiltonian.bonds[en_idx]
+            j = hamiltonian.js[en_idx]
+
+            current_circ_en = current_circ.copy(name)
+            current_circ_en = circuit.act_permutation_qiskit(current_circ_en, [bond], ancilla=True, ancilla_qubit_idx = circuit.n_qubits)
+            current_circ_en.h(circuit.n_qubits)
+            current_circ_en.save_statevector()
+            projector_circuits.append(current_circ_en.copy(name))
+
+    t = time()
+
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+    result = qiskit.execute(projector_circuits, backend, shots=1).result()
+    #statevector = result.get_statevector(projector_circuits[0])
+    print('noisy simulation with quasm took', time() - t)
+
+    survivals = np.zeros((len(projector.cycl), len(hamiltonian.bonds)), dtype=np.float64)
+    ctr = 0
+    for i in range(len(projector.cycl)):
+        for j in range(len(hamiltonian.bonds)):
+            survivals[i, j] = np.sum(np.abs(result.data(ctr)['statevector'][2 ** (circuit.n_qubits):]) ** 2)
+            ctr += 1
+
+    survivals = np.clip(survivals, a_min=0., a_max=1.)
+    survivals = np.random.binomial(N_samples, np.array(survivals)) / N_samples
+
+
+    return np.sum((1 - 2 * survivals).dot(np.array(hamiltonian.js))) / len(projector.cycl)
+
+
+
+
+
+
 def compute_norm_qiskit_hadamardtest_shooting(circuit, projector, N_samples, noise_model):
     circ = circuit.init_circuit_qiskit(ancilla=True)
     circ.h(circuit.n_qubits)
@@ -594,35 +644,35 @@ def compute_norm_qiskit_hadamardtest_shooting(circuit, projector, N_samples, noi
         current_circ.h(circuit.n_qubits)
 
         #current_circ.save_density_matrix()  # save only ancilla qubit density matrix
-        current_circ.measure(circuit.n_qubits + 1, 0)
+        current_circ.measure(circuit.n_qubits, 0)
         projector_circuits.append(current_circ.copy())
 
     t = time()
 
-    backend = qiskit.providers.aer.QasmSimulator(method='qasm_simulator', noise_model=noise_model)
-    result = qiskit.execute(projector_circuits, backend, shots=10).result()
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+    result = qiskit.execute(projector_circuits, backend, shots=1024).result()
     #statevector = result.get_statevector(projector_circuits[0])
     print('noisy simulation with quasm took', time() - t)
 
     survivals = []
-    print(dir(data))
     for i in range(len(projector.cycl)):
         outputstate = result.get_counts(projector_circuits[i])
+        # print(outputstate.keys())
         
-        print(dir(outputstate))
-        if ('1' in outputstate.keys()):
-            m_sum = float(outputstate["1"])/10
+        if ('00000000000000001' in outputstate.keys()):
+            m_sum = float(outputstate['00000000000000001']) / 1024
         else:
             m_sum = 0
         print(m_sum)
 
-        survivals.append(np.sum(np.abs(result.data(i)['statevector'][: 2 ** (circuit.n_qubits)]) ** 2 - np.abs(result.data(i)['statevector'][2 ** (circuit.n_qubits):]) ** 2))
+        survivals.append(m_sum) #1 - 2 * m_sum)
+        # survivals.append(np.sum(np.abs(result.data(i)['statevector'][: 2 ** (circuit.n_qubits)]) ** 2 - np.abs(result.data(i)['statevector'][2 ** (circuit.n_qubits):]) ** 2))
 
     survivals = np.clip(survivals, a_min=0., a_max=1.)
     survivals = np.random.binomial(N_samples, np.array(survivals)) / N_samples
 
 
-    return np.mean(survivals)
+    return np.mean(1 - 2 * survivals)
 
 
 
@@ -666,3 +716,30 @@ def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, nois
         connectivities.append(np.mean(survivals))
 
     return np.array(connectivities)
+
+
+
+
+def compute_gij_qiskit_survivalrate(circuit, new_parameters, N_samples, noise_model):
+    basis_gates = noise_model.basis_gates
+
+    circ = circuit.init_circuit_qiskit()
+    circ = circuit.act_dimerization_qiskit(circ)
+    circ = circuit.act_psi_qiskit(circ, circuit.params)
+
+    circ = circuit.act_psi_qiskit(circ, new_parameters, inverse=True)
+    circ = circuit.act_dimerization_qiskit(circ, inverse=True)
+    circ.save_amplitudes([0])
+
+    t = time()
+
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+    result = qiskit.execute([circ], backend, shots=1).result()
+    print('noisy simulation with quasm took', time() - t)
+
+    survival = np.abs(result.data(0)['amplitudes'][0]) ** 2
+    survival = np.clip(survival, a_min=0., a_max=1.)
+    
+    survival = np.random.binomial(N_samples, survival) / N_samples
+
+    return survival
