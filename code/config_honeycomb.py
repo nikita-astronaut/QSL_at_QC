@@ -24,6 +24,7 @@ class opt_parameters:
         self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/hexagon/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'fresh'
+        self.test = False
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly, self.n_subl = 3, 3, 2
@@ -41,9 +42,9 @@ class opt_parameters:
             utils.get_honeycomb_3x3_mir1_symmetry_map(self.basis, self.su2), \
             utils.get_honeycomb_3x3_mir2_symmetry_map(self.basis, self.su2), \
         ]
-        self.eigenvalues = [1, 1, -1, -1, 1]#[1, 1]#, 1]#, 1, 1]#[1, -1]
-        self.sectors = [0, 0, 3, 1, 0]#[0, 0]#, 0]#, 0, 0]#[0, 2]  # in Toms notation
-        self.degrees = [3, 3, 6, 2, 2]#[2, 2]#, 2]#, 2, 2]#[4, 4]
+        self.eigenvalues = [1, 1, np.exp(1.0j * 2 * np.pi / 6. * 1), 1]#, 1]#[1, 1]#, 1]#, 1, 1]#[1, -1]
+        self.sectors = [0, 0, 1, 0]#, 0]#[0, 0]#, 0]#, 0, 0]#[0, 2]  # in Toms notation
+        self.degrees = [3, 3, 6, 2]#, 2]#[2, 2]#, 2]#, 2, 2]#[4, 4]
 
         self.unitary_no = np.ones((self.Lx * self.Ly * self.n_subl, self.Lx * self.Ly * self.n_subl))
         self.unitary = self.unitary_no
@@ -87,7 +88,8 @@ class opt_parameters:
 
         self.observables = [
                                observables.neel_order_honeycomb(self.Lx, self.Ly, self.basis, self.su2), \
-                               observables.dimer_order_honeycomb(self.Lx, self.Ly, self.basis, self.su2) 
+                               observables.dimer_order_honeycomb(self.Lx, self.Ly, self.basis, self.su2), \
+                               observables.plaquette_order_honeycomb_3x3(self.basis, self.su2)
                            ]
 
 
