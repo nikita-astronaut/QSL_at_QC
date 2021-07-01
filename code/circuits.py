@@ -1051,8 +1051,8 @@ class SU2_symmetrized(Circuit):
 
     def init_circuit_qiskit(self, ancilla=False):
         if ancilla:
-            return qiskit.QuantumCircuit(self.n_qubits + 1, self.n_qubits + 1)  # for Hadamard test scheme: ancilla qubit is the last
-        return qiskit.QuantumCircuit(self.n_qubits, self.n_qubits)  # for survival rate scheme: no ancilla qubit
+            return qiskit.QuantumCircuit(self.n_qubits + 1, 1)#self.n_qubits + 1)  # for Hadamard test scheme: ancilla qubit is the last
+        return qiskit.QuantumCircuit(self.n_qubits, 1)#self.n_qubits)  # for survival rate scheme: no ancilla qubit
 
 
     def act_permutation_qiskit(self, circ, pair_permutations, ancilla=False, ancilla_qubit_idx = None):
