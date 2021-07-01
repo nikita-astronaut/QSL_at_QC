@@ -423,19 +423,21 @@ class SU2_symmetrized(Circuit):
                     new_params = cur_params + self.config.SPSA_epsilon * outers[k]
                     self.set_parameters(new_params, reduced=True)
 
+                    
                     energy_qiskit = []
                     for repetition in range(self.config.n_noise_repetitions):
                         energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
                     Ep = np.mean(energy_qiskit)
                     Np = np.mean([utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model) \
                                       for repetition in range(self.config.n_noise_repetitions)])
-
+                    
                     statep = self.__call__()
 
 
                     new_params = cur_params - self.config.SPSA_epsilon * outers[k]
                     self.set_parameters(new_params, reduced=True)
 
+                    
                     energy_qiskit = []
                     for repetition in range(self.config.n_noise_repetitions):
                         energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
@@ -443,13 +445,16 @@ class SU2_symmetrized(Circuit):
                     Nm = np.mean([utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model) \
                                       for repetition in range(self.config.n_noise_repetitions)])
 
+                    
+
                     statem = self.__call__()
 
-                    Ep_exact = np.vdot(statep, hamiltonian(statep))
-                    Em_exact = np.vdot(statem, hamiltonian(statem))
+                    Ep_exact = np.vdot(statep, hamiltonian(statep)).real
+                    Em_exact = np.vdot(statem, hamiltonian(statem)).real
 
-                    Np_exact = np.vdot(statep, projector(statep))
-                    Nm_exact = np.vdot(statem, projector(statem))
+                    Np_exact = np.vdot(statep, projector(statep)).real
+                    Nm_exact = np.vdot(statem, projector(statem)).real
+                    #Em = Em_exact; Ep = Ep_exact; Np = Np_exact; Nm = Nm_exact; ## FIXME
 
                     self.energy += (Ep / Np + Em / Nm) / 2.  # biased estimate but fine
                     grad_sampling += (Ep / Np - Em / Nm) / 2 / self.config.SPSA_epsilon * outers[k]
@@ -688,6 +693,8 @@ class SU2_symmetrized(Circuit):
                     Fp1_exact = np.abs(np.vdot(state0, statep1)) ** 2
                     Fm1p2_exact = np.abs(np.vdot(state0, statem1p2)) ** 2
                     Fm1_exact = np.abs(np.vdot(state0, statem1)) ** 2
+
+                    #Fp1p2 = Fp1p2_exact; Fp1 = Fp1_exact; Fm1p2 = Fm1p2_exact; Fm1 = Fm1_exact;  # FIXME
 
 
                     print('Fp1p2', Fp1p2, Fp1p2_exact)

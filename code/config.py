@@ -22,7 +22,7 @@ class opt_parameters:
         j2 = float(sys.argv[2])
         # n_trial = int(sys.argv[3])
         ### preparing the logging ###
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1l_SPSA_realnoise/{:.3f}/'.format(j2)
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/1l_SPSA_noise_smallnoise/{:.3f}/'.format(j2)
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'#preassigned'
         #self.start_params = np.array([-0.3685, 0.4482, -0.0392, 0.2020, 0.0176, 0.0232, 0.2243, -0.1977, -0.0397, 0.1452, 0.0977, 0.1164, -0.0738, -0.0676, 0.2746, -0.2067, -0.0607, 0.1969, -0.1255, -0.0639, 0.0043, 0.1844, 0.1209, -0.2012, -0.7399, 0.0994, -0.0190, -0.0755, 0.0712, 0.0217, 0.0836, 0.0750, 0.5846, 0.0583, -0.0376, 0.8201, 0.3595, 0.2171, 0.1347, 0.4565, 0.2980, 0.1066, 0.1914, -0.2382, 0.0938, 0.0925, 0.0987, 0.0874, 0.3376, 0.2784, 0.5012, 0.4006, 0.5574, 0.3548, 0.2837, 0.3671, -0.4296, 0.0146, 0.0455, 0.0115, -0.0268, -0.0026, 0.0025, -0.0297,])
@@ -119,13 +119,13 @@ class opt_parameters:
 
         self.optimizer = optimizers.Optimizer
         self.algorithm = optimizers.SPSA_gradiend_descend
-        self.opt_params_dict = {'lr' : 1e-4}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.opt_params_dict = {'lr' : 1e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
         self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = 1e-1; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 26
+        self.N_samples = 2 ** 14
         self.SR_eig_cut = 1e-1
         self.SR_diag_reg = 0.
 
@@ -134,8 +134,8 @@ class opt_parameters:
         self.qiskit = True #True # True
         if self.qiskit:
             import qiskit.providers.aer.noise as noise
-            self.prob_1 = 1e-8
-            self.prob_2 = 1e-8
+            self.prob_1 = 1.5e-5
+            self.prob_2 = 1.5e-4
             error_1 = noise.depolarizing_error(self.prob_1, 1)
             error_2 = noise.depolarizing_error(self.prob_2, 2)
 
@@ -143,7 +143,7 @@ class opt_parameters:
             self.noise_model = noise.NoiseModel()
             self.noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'h'])
             self.noise_model.add_all_qubit_quantum_error(error_2, ['swap', 'eswap', 'cx'])
-            self.n_noise_repetitions = 3
+            self.n_noise_repetitions = 4
 
 
 
