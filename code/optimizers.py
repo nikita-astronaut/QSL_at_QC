@@ -261,7 +261,7 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
 
     ## ADAM parameters ##
     beta1 = 0.9
-    beta2 = 0.99
+    beta2 = 0.95
     epsilon = 1e-8
 
     v = None
@@ -320,15 +320,15 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
 
         circuit.forces = grads.copy()
 
-        
-
-        grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
-        circuit.forces_SR = grads.copy()
+        #grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
+        #circuit.forces_SR = grads.copy()
 
         m = grads if m is None else m * beta1 + (1 - beta1) * grads
         v = np.vdot(grads, grads) if v is None else v * beta2 + (1. - beta2) * np.vdot(grads, grads)
 
-        grads = m / (np.sqrt(v) + epsilon)
+        #grads = m / (np.sqrt(v) + epsilon)
+        grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
+        circuit.forces_SR = grads.copy()
 
         new_params = (cur_params - lr * grads).real
         if config.lagrange:
