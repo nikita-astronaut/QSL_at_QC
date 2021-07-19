@@ -8,6 +8,13 @@ import scipy
 import utils
 from time import time
 import qiskit
+import mpi4py
+from mpi4py import MPI
+
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 
 sz = np.array([[1, 0], \
@@ -58,6 +65,7 @@ class Circuit(object):
         ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, N_samples, method)
         print('metric tensor: ', time() - t)
         self.connectivity_sampling = j_sampling
+        self.connectivity_exact = j
 
         t = time()
         grads, grads_sampling = self.get_all_derivatives(hamiltonian, projector, N_samples, method)
@@ -258,6 +266,10 @@ class SU2_symmetrized(Circuit):
         self.layers, self.pairs = self._get_dimerizarion_layers()
         self.params = self._initialize_parameters()
 
+        #if self.config.with_mpi and rank == 0:
+        comm.Bcast([self.params, MPI.DOUBLE], root = 0)
+        comm.Barrier()
+        print('process', rank, 'parameters', self.params)
 
         ### defining of unitaries ###
         self._refresh_unitaries_derivatives()
@@ -308,6 +320,7 @@ class SU2_symmetrized(Circuit):
             norm = np.dot(state.conj(), state_proj)
 
             energy = np.dot(np.conj(state), hamiltonian(state_proj) / norm)
+            self.energy_exact = energy
 
             LEFT = hamiltonian(state_proj)
             LEFT_conn = state_proj.copy()  # total projector is Hermitean
@@ -419,38 +432,88 @@ class SU2_symmetrized(Circuit):
 
 
 
-                else:
                     new_params = cur_params + self.config.SPSA_epsilon * outers[k]
                     self.set_parameters(new_params, reduced=True)
 
-                    
-                    energy_qiskit = []
-                    for repetition in range(self.config.n_noise_repetitions):
-                        energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
-                    Ep = np.mean(energy_qiskit)
-                    Np = np.mean([utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model) \
-                                      for repetition in range(self.config.n_noise_repetitions)])
-                    
+                
                     statep = self.__call__()
+                    Np = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples // self.config.n_noise_repetitions, \
+                                                                self.config.n_noise_repetitions, self.config.noise_model)
+    
+                    #for repetition in range(self.config.n_noise_repetitions):
+                    #    energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
+                    
+                    Ep = utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+                    
 
+                    ### TESTING ###
+                    ''' 
+                    for p_real in 2. ** (-np.arange(5, 2, -1)):
+                        for N_samples in [2 ** 10, 2 ** 12, 2 ** 14]:
+                            for M in [8, 16, 32, 64, 128]:
+                                logfile = open('/home/cluster/niastr/data/QSL_at_QC/logs/testlogs/{:d}_{:d}_{:.3f}.dat'.format(N_samples, M, p_real), 'w')
+                                p_bare = p_real * np.sqrt(M * 1. / N_samples)
+                                import qiskit.providers.aer.noise as noise
+
+                                self.config.N_samples = N_samples
+                                self.config.n_noise_repetitions = M
+                                self.config.prob_1 = p_bare / 10
+                                self.config.prob_2 = p_bare
+                                error_1 = noise.depolarizing_error(self.config.prob_1, 1)
+                                error_2 = noise.depolarizing_error(self.config.prob_2, 2)
+
+                                # Add errors to noise model
+                                self.config.noise_model = noise.NoiseModel()
+                                self.config.noise_model.add_all_qubit_quantum_error(error_1, ['u1', 'u2', 'u3', 'h'])
+                                self.config.noise_model.add_all_qubit_quantum_error(error_2, ['swap', 'eswap', 'cx'])
+
+                                
+
+                                energy_qiskit = []
+                                for _ in range(self.config.test_trials):
+                                    Ep = utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+                                    energy_qiskit.append(Ep)
+                                    print(Ep)
+
+                                energy_qiskit = np.array(energy_qiskit)
+                                Ep_exact = np.vdot(statep, hamiltonian(projector(statep))).real
+
+
+                                logfile.write('{:.4f} {:.4f} {:.4f} {:.4f}\n'.format(np.mean(energy_qiskit) - Ep_exact, np.std(energy_qiskit) / np.sqrt(self.config.test_trials), np.std(energy_qiskit), np.std(energy_qiskit) / 2 / np.sqrt(self.config.test_trials)))
+                                logfile.close()
+                                print('mean:', np.mean(energy_qiskit) - Ep_exact)
+                                print('mean error:', np.std(energy_qiskit) / np.sqrt(self.config.test_trials))
+                                print('std:', np.std(energy_qiskit))
+                                print('std error:', np.std(energy_qiskit) / 2 / np.sqrt(self.config.test_trials))
+                    exit(-1)
+                    '''
+                    ### END TESTING ###
+                    
+                    #np.mean(energy_qiskit)
+                    # Np = np.mean([utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model) \
+                    #                   for repetition in range(self.config.n_noise_repetitions)])
+                 
 
                     new_params = cur_params - self.config.SPSA_epsilon * outers[k]
                     self.set_parameters(new_params, reduced=True)
 
                     
                     energy_qiskit = []
-                    for repetition in range(self.config.n_noise_repetitions):
-                        energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
-                    Em = np.mean(energy_qiskit)
-                    Nm = np.mean([utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model) \
-                                      for repetition in range(self.config.n_noise_repetitions)])
+                    #for repetition in range(self.config.n_noise_repetitions):
+                    #    energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
+                    Em = utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+                    #np.mean(energy_qiskit)
+                    Nm = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples // self.config.n_noise_repetitions, \
+                                                                self.config.n_noise_repetitions, self.config.noise_model)
+                    #np.mean([utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model) \
+                    #                  for repetition in range(self.config.n_noise_repetitions)])
 
                     
 
                     statem = self.__call__()
 
-                    Ep_exact = np.vdot(statep, hamiltonian(statep)).real
-                    Em_exact = np.vdot(statem, hamiltonian(statem)).real
+                    Ep_exact = np.vdot(statep, hamiltonian(projector(statep))).real
+                    Em_exact = np.vdot(statem, hamiltonian(projector(statem))).real
 
                     Np_exact = np.vdot(statep, projector(statep)).real
                     Nm_exact = np.vdot(statem, projector(statem)).real
@@ -467,12 +530,54 @@ class SU2_symmetrized(Circuit):
 
                     self.set_parameters(cur_params)
 
-
-                    
-
             self.norm /= self.config.SPSA_gradient_averages
             grad_sampling /= self.config.SPSA_gradient_averages
             self.energy /= self.config.SPSA_gradient_averages
+
+
+
+        elif method == 'SPSA_realgrad':
+            cur_params = self.params.copy()
+
+            self.energy = utils.compute_energy_qiskit_fromshift(self, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+            if self.config.with_mpi:
+                self.energy = np.array([self.energy])
+                energy_part = self.energy.copy() * 1.
+                print('process', rank,' energy',  energy_part)
+                comm.Allreduce(energy_part, self.energy, op=MPI.SUM)
+                comm.Barrier()
+                self.energy /= size
+                self.energy = self.energy[0]
+                print('process', rank, 'energy after', self.energy)
+
+            grad_sampling = np.zeros(len(self.params), dtype=np.float64)
+
+
+            for i in range(len(self.params) // size * rank, len(self.params) // size * (rank + 1)):
+                new_params = cur_params.copy() * 1.
+                new_params[i] += np.pi / 4.
+                self.set_parameters(new_params)
+
+                energy_p = utils.compute_energy_qiskit_fromshift(self, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+
+                new_params = cur_params.copy() * 1.
+                new_params[i] -= np.pi / 4.
+                self.set_parameters(new_params)
+
+                energy_m = utils.compute_energy_qiskit_fromshift(self, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+
+                grad_sampling[i] = energy_p - energy_m
+                #print(i, grad_sampling[-1], grads[i], flush=True)
+            self.set_parameters(cur_params)
+
+            if self.config.with_mpi:
+                grad_part = grad_sampling.copy() * 1.
+                print('process', rank, 'gradient part before ', grad_part)
+                comm.Allreduce(grad_part, grad_sampling, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'gradient total after', grad_sampling)
+                
+            self.norm = 1.
 
         if self.config.test:
             return np.array(grads), grad_sampling
@@ -683,10 +788,10 @@ class SU2_symmetrized(Circuit):
 
                     self.set_parameters(cur_params)
 
-                    Fp1p2 = utils.compute_gij_qiskit_survivalrate(self, cur_params + pairs[k][0] + pairs[k][1], N_samples, self.config.noise_model)
-                    Fp1 = utils.compute_gij_qiskit_survivalrate(self, cur_params + pairs[k][0], N_samples, self.config.noise_model)
-                    Fm1p2 = utils.compute_gij_qiskit_survivalrate(self, cur_params - pairs[k][0] + pairs[k][1], N_samples, self.config.noise_model)
-                    Fm1 = utils.compute_gij_qiskit_survivalrate(self, cur_params - pairs[k][0], N_samples, self.config.noise_model)
+                    Fp1p2 = utils.compute_gij_qiskit_survivalrate(self, cur_params + pairs[k][0] + pairs[k][1], N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+                    Fp1 = utils.compute_gij_qiskit_survivalrate(self, cur_params + pairs[k][0], N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+                    Fm1p2 = utils.compute_gij_qiskit_survivalrate(self, cur_params - pairs[k][0] + pairs[k][1], N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
+                    Fm1 = utils.compute_gij_qiskit_survivalrate(self, cur_params - pairs[k][0], N_samples // self.config.n_noise_repetitions, self.config.n_noise_repetitions, self.config.noise_model)
 
 
                     Fp1p2_exact =  np.abs(np.vdot(state0, statep1p2)) ** 2
@@ -707,6 +812,90 @@ class SU2_symmetrized(Circuit):
 
                 MT_sample += -(1. / 2.) * (Fp1p2 - Fp1 - Fm1p2 + Fm1) / 2. / self.config.SPSA_epsilon ** 2 * outers[k]
             MT_sample /= self.config.SPSA_hessian_averages
+
+            if self.config.with_mpi:
+                MT_sample_part = MT_sample.copy() * 1.
+                comm.Allreduce(MT_sample_part, MT_sample, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'MT_tensor', MT_sample)
+
+            connectivity = 1.  # we need it not
+            norm_sampling = 1.
+
+        elif method == 'SPSA_realgrad':
+            cur_params = self.params.copy()
+            wfs = np.zeros((len(self.params), 2, self.config.n_noise_repetitions // size, len(self.basis.states)), dtype=np.complex128)
+            print('basis states len', len(self.basis.states), flush=True)
+
+
+            #for i in range(len(self.params) // size * rank, len(self.params) // size * (rank + 1)):
+            for i in range(len(self.params)):
+                new_params = cur_params.copy() * 1.
+                new_params[i] += np.pi / 4.  # ??
+                self.set_parameters(new_params)
+
+                wfs[i, 0, ...] = utils.compute_wavefunction(self, self.config.n_noise_repetitions // size, self.config.noise_model)
+               
+                new_params = cur_params.copy() * 1.
+                new_params[i] -= np.pi / 4.  # ??
+                self.set_parameters(new_params)
+                
+                wfs[i, 1, ...] = utils.compute_wavefunction(self, self.config.n_noise_repetitions // size, self.config.noise_model)
+            self.set_parameters(cur_params)
+
+
+            t = time()
+            #if self.config.with_mpi:
+            #    wfs_part = wfs.copy() * 1.
+            #    comm.Allreduce(wfs_part, wfs, op=MPI.SUM)
+            #    comm.Barrier()
+            #print('send-receive of wfs', time() - t)
+
+            MT_sample = np.zeros((len(self.params), len(self.params), self.config.n_noise_repetitions // size), dtype=np.float64)
+            N_samples_local = N_samples // self.config.n_noise_repetitions
+            print('shape of wfs', wfs.shape, flush=True)
+            if rank == 0:
+                 probas = np.abs(np.einsum('ikl,jkl->ijk', wfs[:, 1, ...].conj(), wfs[:, 0, ...])) ** 2
+
+                 #np.abs(np.dot(wfs[:, 1, :].conj(), wfs[:, 0, :].T)) ** 2
+                 print('shape of probas', probas.shape, flush=True)
+                 probas = np.clip(probas, a_min=0., a_max=1.)  
+                 probas = np.random.binomial(N_samples_local, probas) / N_samples_local
+                 MT_sample -= probas / 8.
+
+                 #probas = np.abs(np.dot(wfs[:, 1, :].conj(), wfs[:, 1, :].T)) ** 2
+                 probas = (np.abs(np.einsum('ikl,jkl->ijk', wfs[:, 1, ...].conj(), wfs[:, 1, ...])) ** 2)#.mean(axis=-1)
+                 probas = np.clip(probas, a_min=0., a_max=1.)
+                 probas = np.random.binomial(N_samples_local, probas) / N_samples_local
+                 MT_sample += probas / 8.
+
+                 #probas = np.abs(np.dot(wfs[:, 0, :].conj(), wfs[:, 0, :].T)) ** 2
+                 probas = (np.abs(np.einsum('ikl,jkl->ijk', wfs[:, 0, ...].conj(), wfs[:, 0, ...])) ** 2)#.mean(axis=-1)
+                 probas = np.clip(probas, a_min=0., a_max=1.)
+                 probas = np.random.binomial(N_samples_local, probas) / N_samples_local
+                 MT_sample += probas / 8.
+                 
+                 #probas = np.abs(np.dot(wfs[:, 0, :].conj(), wfs[:, 1, :].T)) ** 2
+                 probas = (np.abs(np.einsum('ikl,jkl->ijk', wfs[:, 0, ...].conj(), wfs[:, 1, ...])) ** 2)#.mean(axis=-1)
+                 probas = np.clip(probas, a_min=0., a_max=1.)
+                 probas = np.random.binomial(N_samples_local, probas) / N_samples_local
+                 MT_sample -= probas / 8.
+
+            MT_sample = MT_sample.mean(axis=-1)
+            if self.config.with_mpi:
+                MT_sample_part = MT_sample.copy() * 1.
+                comm.Allreduce(MT_sample_part, MT_sample, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'MT_tensor', MT_sample) 
+
+            MT_sample = MT_sample * 4. / size
+            #if rank == 0:
+            #    for i in range(len(self.params)):
+            #        for j in range(len(self.params)):
+            #            print(i, j, MT[i, j], MT_sample[i, j], np.conj(der_i[i]) * der_i[j], MT[i, j] - np.conj(der_i[i]) * der_i[j])
+            #    print('MT scheme', MT_sample)
+            #    print('connectivity', der_i)
+            #    exit(-1)
 
 
             
@@ -821,20 +1010,22 @@ class SU2_symmetrized(Circuit):
             which_noise = np.floor(np.random.uniform(0, 1, size=(len(self.params), len(self.params))) * 15)
         '''
 
-        self.der_states = np.asfortranarray(self._initial_state_noisy_batched(len(self.params), fixed=False).T) # np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
+        #self.der_states = np.asfortranarray(self._initial_state_noisy_batched(len(self.params), fixed=False).T) # 
+        self.der_states = np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
 
-        apply_noise = np.random.uniform(0, 1, size=(len(self.params), len(self.params))) < self.config.noise_p
-        which_noise = np.floor(np.random.uniform(0, 1, size=(len(self.params), len(self.params))) * 15).astype(np.int64)
+       
+        #apply_noise = np.random.uniform(0, 1, size=(len(self.params), len(self.params))) < self.config.noise_p
+        #which_noise = np.floor(np.random.uniform(0, 1, size=(len(self.params), len(self.params))) * 15).astype(np.int64)
 
         for i in range(len(self.params)):
             self.der_states = self.unitaries[i][0](self.der_states)
             self.der_states[..., i] = self.derivatives[i][0](np.ascontiguousarray(self.der_states[..., i]))
 
-            for idx in range(len(self.params)):
-                if apply_noise[idx, i]:
-                    print('gates: applied noise on pair', self.pairs[i], 'gate', which_noise[idx, i])
-                    op = ls.Operator(self.basis_bare, [ls.Interaction(self.noise_operators[which_noise[idx, i]], [self.pairs[i]])])
-                    self.der_states[:, idx] = op(self.der_states[:, idx])
+            #for idx in range(len(self.params)):
+            #    if apply_noise[idx, i]:
+            #        print('gates: applied noise on pair', self.pairs[i], 'gate', which_noise[idx, i])
+            #        op = ls.Operator(self.basis_bare, [ls.Interaction(self.noise_operators[which_noise[idx, i]], [self.pairs[i]])])
+            #        self.der_states[:, idx] = op(self.der_states[:, idx])
 
 
             '''
@@ -1006,6 +1197,8 @@ class SU2_symmetrized(Circuit):
                     layers.append(deepcopy(layer))
                     pairs.append((ii, jj))
                 
+                
+                
         return layers, pairs
 
             
@@ -1019,7 +1212,16 @@ class SU2_symmetrized(Circuit):
 
         try:
             parameters_log = open(os.path.join(self.config.path_to_logs, 'parameters_log.dat'), 'r') 
-            last_line = parameters_log.readlines()[-1]
+            lines = parameters_log.readlines()
+
+            params_history = []
+            for line in lines:
+                arr = 'np.array([' + line + '])'
+                params_history.append(eval(arr))
+            self.params_history = np.array(params_history)
+
+
+            last_line = lines[-1]
             arr = 'np.array([' + last_line + '])'
 
             lambda_log = open(os.path.join(self.config.path_to_logs, 'lambda_log.dat'), 'r')
@@ -1304,4 +1506,39 @@ class SU2_symmetrized_honeycomb_3x3(SU2_symmetrized):
                 layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
                 layers.append(deepcopy(layer))
         return layers
+
+
+
+class SU2_symmetrized_square_5x4(SU2_symmetrized): 
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for pattern in [
+                  [(0, 1), (2, 3), (5, 6), (7, 8), (10, 11), (12, 13), (15, 16), (17, 18)], \
+                  [(0, 6), (1, 7), (2, 8), (3, 9), (4, 5), (10, 16), (11, 17), (12, 18), (13, 19), (14, 15)], \
+                  [(1, 2), (3, 4), (6, 7), (8, 9), (11, 12), (13, 14), (16, 17), (18, 19)], \
+                  [(5, 11), (6, 12), (7, 13), (8, 14), (9, 10), (15, 1), (16, 2), (17, 3), (18, 4), (19, 0)], \
+                  [(0, 4), (5, 9), (10, 14), (15, 19)], \
+                  [(5, 1), (6, 2), (7, 3), (8, 4), (9, 0), (15, 11), (16, 12), (17, 13), (18, 14), (19, 10)], \
+                  [(0, 5), (10, 15), (1, 6), (11, 16), (2, 7), (12, 17), (3, 8), (13, 18), (4, 9), (14, 19)], \
+                  [(10, 6), (11, 7), (12, 8), (13, 9), (14, 5), (0, 16), (1, 17), (2, 18), (3, 19), (4, 15)], \
+                  [(0, 15), (5, 10), (1, 16), (6, 11), (2, 17), (7, 12), (3, 18), (8, 13), (4, 19), (9, 14)]
+                ]:
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+                pairs.append((i, j))
+
+        return layers, pairs
 

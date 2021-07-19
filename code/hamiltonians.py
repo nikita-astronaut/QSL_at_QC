@@ -40,13 +40,13 @@ class Hamiltonian(object):
    
         ### obtaining ground state in the correct symmetry sector ###
         self.basis = ls.SpinBasis(ls.Group([ls.Symmetry(s, sector=sec) for s, sec in zip(self.symmetries, self.sectors)]), \
-                                            number_spins=n_qubits, hamming_weight=n_qubits // 2 + self.spin if su2 else None)
+                                            number_spins=n_qubits, hamming_weight=n_qubits // 2 + self.spin if su2 else None, spin_inversion=+1)
         self.basis.build()
         
 
         self._matrix, self._terms, self.bonds, self.js = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 12, dtype=np.complex128)
+        energy, ground_state = ls.diagonalize(self._matrix, k = 4, dtype=np.complex128)
         print(repr(energy - self.energy_renorm))
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
@@ -54,8 +54,6 @@ class Hamiltonian(object):
         #        print(np.dot(state.conj(), state[s]))
         ## DEBUG
         
-        print()
-        print(energy - self.energy_renorm)
         spins = []
         all_bonds = []
         for i in range(self.n_qubits):
@@ -81,8 +79,11 @@ class Hamiltonian(object):
             rep, character, norm = self.basis.state_info(nonsymm_state)
             if norm != 0.:
                 gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
+
+        gs_nonsymm = gs_nonsymm * np.sqrt(2)  # FIXME FIXME FIXME
         self.ground_state = gs_nonsymm[np.newaxis, :]
-        assert np.isclose(np.dot(gs_nonsymm.conj(), gs_nonsymm), 1.0)
+        print(np.vdot(gs_nonsymm, gs_nonsymm))
+        assert np.isclose(np.vdot(gs_nonsymm, gs_nonsymm), 1.0)
 
         ### finally obtaining the GS in the nonsymmetric basis (provided from config) ###
         self.basis = basis
@@ -189,18 +190,19 @@ class HeisenbergSquare(Hamiltonian):
                     bondsun.append((site, site_right))
 
 
-            site_up = ((x + 1) % Lx) + ((y + 1) % Ly) * Lx
-            site_right = ((x + 1) % Lx) + ((y - 1) % Ly) * Lx
-            if (x + 1 < Lx and y + 1 < Ly) or BC == 'PBC':
-                if self.unitary[site, site_up] == +1:
-                    bonds_j2.append((site, site_up))
-                else:
-                    bonds_j2un.append((site, site_up))
-            if (x + 1 < Lx and y - 1 >= 0) or BC == 'PBC':
-                if self.unitary[site, site_right] == +1:
-                    bonds_j2.append((site, site_right))
-                else:
-                    bonds_j2un.append((site, site_right))
+            if not np.isclose(j2, 0.0):
+                site_up = ((x + 1) % Lx) + ((y + 1) % Ly) * Lx
+                site_right = ((x + 1) % Lx) + ((y - 1) % Ly) * Lx
+                if (x + 1 < Lx and y + 1 < Ly) or BC == 'PBC':
+                    if self.unitary[site, site_up] == +1:
+                        bonds_j2.append((site, site_up))
+                    else:
+                        bonds_j2un.append((site, site_up))
+                if (x + 1 < Lx and y - 1 >= 0) or BC == 'PBC':
+                    if self.unitary[site, site_right] == +1:
+                        bonds_j2.append((site, site_right))
+                    else:
+                        bonds_j2un.append((site, site_right))
 
         self.energy_renorm = len(bonds) + len(bondsun) + len(bonds_j2) * j2 + len(bonds_j2un) * j2
         return ls.Operator(self.basis, ([ls.Interaction(operator * 2, bonds)] if len(bonds) > 0 else []) + \

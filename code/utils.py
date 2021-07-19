@@ -4,6 +4,8 @@ import numpy as np
 from time import time
 import lattice_symmetries as ls
 import qiskit
+import scipy
+import scipy.linalg
 
 def index_to_spin(index, number_spins = 16):
     return (((index.reshape(-1, 1).astype(np.int64) & (1 << np.arange(number_spins).astype(np.int64)))) > 0)
@@ -51,9 +53,22 @@ def get_x_symmetry_map(Lx, Ly, basis, su2=False):
         j = (x + 1) % Lx + y * Lx
         map_site.append(j)
     map_site = np.array(map_site)
+    print('x', map_site)
 
     spins = spins[:, map_site]
-    return map_site, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
+
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
+    idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
+
+    permutation = []
+    st_list = basis.states
+    for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
+        if idx in st_list:
+            permutation.append(idx)
+        else:
+            permutation.append(idx_flip)
+
+    return map_site, np.argsort(np.array(permutation)) #np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
 def get_y_symmetry_map(Lx, Ly, basis, su2=False):
     spins = index_to_spin(basis.states, number_spins = Lx * Ly)
@@ -64,10 +79,22 @@ def get_y_symmetry_map(Lx, Ly, basis, su2=False):
         j = x + ((y + 1) % Ly) * Lx
         map_site.append(j)
     map_site = np.array(map_site)
+    print('y', map_site)
 
     spins = spins[:, map_site]
-    return map_site, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
+    idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
+
+    permutation = []
+    st_list = basis.states
+    for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
+        if idx in st_list:
+            permutation.append(idx)
+        else:
+            permutation.append(idx_flip)
+
+    return map_site, np.argsort(np.array(permutation))
 
 
 def get_Cx_symmetry_map(Lx, Ly, basis, su2=False):
@@ -80,10 +107,22 @@ def get_Cx_symmetry_map(Lx, Ly, basis, su2=False):
         j = (Lx - 1 - x) % Lx + y * Lx
         map_site.append(j)
     map_site = np.array(map_site)
+    print('Cx', map_site)
 
     spins = spins[:, map_site]
-    return map_site, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
+    idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
+
+    permutation = []
+    st_list = basis.states
+    for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
+        if idx in st_list:
+            permutation.append(idx)
+        else:
+            permutation.append(idx_flip)
+
+    return map_site, np.argsort(np.array(permutation))
 
 def r_to_index(x, y, Lx, Ly):
     return y * Lx + x
@@ -129,7 +168,19 @@ def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
     map_site = np.array(map_site)
 
     spins = spins[:, map_site]
-    return map_site, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
+
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
+    idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
+
+    permutation = []
+    st_list = basis.states
+    for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
+        if idx in st_list:
+            permutation.append(idx)
+        else:
+            permutation.append(idx_flip)
+
+    return map_site, np.argsort(np.array(permutation))
 
 def get_hexagon_rot_symmetry_map(basis, su2=False):
     spins = index_to_spin(basis.states, number_spins = 6)
@@ -424,11 +475,12 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
     
     for proj_idx in range(projector.nterms):
         z = time()
-        states_j_proj = projector(states, proj_idx).conj() # np.array([projector(states[j], proj_idx) for j in range(len(states))]).conj(
+        states_j_proj = projector(states, proj_idx)#.conj() # np.array([projector(states[j], proj_idx) for j in range(len(states))]).conj(
         t_proj += time() - z
 
         z = time()
-        ps = 0.5 - np.dot(states, states_j_proj.T).conj() / 2.
+        ps = 0.5 - np.dot(states, states_j_proj.T.conj()).conj() / 2.
+        #ps = 0.5 - scipy.linalg.blas.zgemm(1, np.asfortranarray(states), np.asfortranarray(states_j_proj), trans_b = 2).conj() / 2.
         ps_real[..., proj_idx] = ps.real
         ps_imag[..., proj_idx] = ps.imag + 0.5
 
@@ -529,7 +581,7 @@ def compute_norm_qiskit_survivalrate(circuit, projector, N_samples, noise_model)
     t = time()
 
     backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
-    result = qiskit.execute(projector_circuits, backend, shots=1).result()
+    result = qiskit.execute(projector_circuits, backend, shots=1, basis_gates = backend.configuration().basis_gates).result()
     print('noisy simulation with quasm took', time() - t)
 
     survivals = []
@@ -543,7 +595,7 @@ def compute_norm_qiskit_survivalrate(circuit, projector, N_samples, noise_model)
     return np.mean(survivals)
 
 
-def compute_norm_qiskit_hadamardtest(circuit, projector, N_samples, noise_model):
+def compute_norm_qiskit_hadamardtest(circuit, projector, N_samples, n_repetitions, noise_model):
     circ = circuit.init_circuit_qiskit(ancilla=True)
     circ.h(circuit.n_qubits)
     circ = circuit.act_dimerization_qiskit(circ)
@@ -557,37 +609,36 @@ def compute_norm_qiskit_hadamardtest(circuit, projector, N_samples, noise_model)
         current_circ = circuit.act_permutation_qiskit(current_circ, pair_permutations, ancilla=True, ancilla_qubit_idx = circuit.n_qubits)
         current_circ.h(circuit.n_qubits)
 
-        #current_circ.save_density_matrix()  # save only ancilla qubit density matrix
-        current_circ.save_statevector()
+        current_circ.save_statevector(pershot=True) # try doing just 1-qubit measurement
         projector_circuits.append(current_circ.copy())
 
     t = time()
-
-    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
-    result = qiskit.execute(projector_circuits, backend, shots=1).result()
-    #statevector = result.get_statevector(projector_circuits[0])
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model, max_parallel_experiments=len(projector_circuits))
+    result = qiskit.execute(projector_circuits, backend, shots=n_repetitions, memory=True, basis_gates = backend.configuration().basis_gates).result()
     print('noisy simulation with quasm took', time() - t)
 
     survivals = []
     for i in range(len(projector.cycl)):
-        survivals.append(np.sum(np.abs(result.data(i)['statevector'][: 2 ** (circuit.n_qubits)]) ** 2 - np.abs(result.data(i)['statevector'][2 ** (circuit.n_qubits):]) ** 2))
+        survivals.append(1. - 2 * np.sum(np.abs(np.array(result.data(i)['statevector'])[:, 2 ** (circuit.n_qubits):]) ** 2, axis=-1))
 
+    survivals = np.array(survivals)
     survivals = np.clip(survivals, a_min=0., a_max=1.)
-    survivals = np.random.binomial(N_samples, np.array(survivals)) / N_samples
-
+    survivals = np.random.binomial(N_samples, survivals) / N_samples
 
     return np.mean(survivals)
 
 
 
-def compute_energy_qiskit_hadamardtest(circuit, projector, hamiltonian, N_samples, noise_model):
+def compute_energy_qiskit_hadamardtest(circuit, projector, hamiltonian, N_samples, n_repetitions, noise_model):
     circ = circuit.init_circuit_qiskit(ancilla=True)
     circ.h(circuit.n_qubits)
     circ = circuit.act_dimerization_qiskit(circ)
     circ = circuit.act_psi_qiskit(circ, circuit.params)
 
-    projector_circuits = []
+
+    survivals = np.zeros((len(projector.cycl), len(hamiltonian.bonds), n_repetitions), dtype=np.float64)
     for idx, cycl in enumerate(projector.cycl):
+        projector_circuits = []
         current_circ = circ.copy('circuit_projector_{:d}'.format(idx))
 
         pair_permutations = projector.all_pair_permutations[idx]
@@ -601,28 +652,62 @@ def compute_energy_qiskit_hadamardtest(circuit, projector, hamiltonian, N_sample
             current_circ_en = current_circ.copy(name)
             current_circ_en = circuit.act_permutation_qiskit(current_circ_en, [bond], ancilla=True, ancilla_qubit_idx = circuit.n_qubits)
             current_circ_en.h(circuit.n_qubits)
-            current_circ_en.save_statevector()
+            current_circ_en.save_statevector(pershot=True)
             projector_circuits.append(current_circ_en.copy(name))
 
-    t = time()
+        t = time()
 
-    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
-    result = qiskit.execute(projector_circuits, backend, shots=1).result()
-    #statevector = result.get_statevector(projector_circuits[0])
-    print('noisy simulation with quasm took', time() - t)
+        backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+        result = qiskit.execute(projector_circuits, backend, shots=n_repetitions, memory=True, basis_gates = backend.configuration().basis_gates).result()
+        print('noisy simulation with quasm took', time() - t)
 
-    survivals = np.zeros((len(projector.cycl), len(hamiltonian.bonds)), dtype=np.float64)
-    ctr = 0
-    for i in range(len(projector.cycl)):
+        ctr = 0
         for j in range(len(hamiltonian.bonds)):
-            survivals[i, j] = np.sum(np.abs(result.data(ctr)['statevector'][2 ** (circuit.n_qubits):]) ** 2)
+            survivals[idx, j, :] = np.sum(np.abs(np.array(result.data(ctr)['statevector'])[:, 2 ** (circuit.n_qubits):]) ** 2, axis=-1)
             ctr += 1
 
+    
     survivals = np.clip(survivals, a_min=0., a_max=1.)
-    survivals = np.random.binomial(N_samples, np.array(survivals)) / N_samples
+    survivals = np.random.binomial(N_samples, survivals) / N_samples
+    survivals = survivals.mean(axis = -1)
 
 
     return np.sum((1 - 2 * survivals).dot(np.array(hamiltonian.js))) / len(projector.cycl)
+
+
+
+
+
+def compute_energy_qiskit_fromshift(circuit, hamiltonian, N_samples, n_repetitions, noise_model):  # no projector allowed in this scenario
+    circ = circuit.init_circuit_qiskit(ancilla = False)
+    circ = circuit.act_dimerization_qiskit(circ)
+    circ = circuit.act_psi_qiskit(circ, circuit.params)
+    circ.save_statevector(pershot=True)
+
+
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+    result = qiskit.execute([circ], backend, shots=n_repetitions, memory=True, basis_gates = backend.configuration().basis_gates).result()
+
+    wfs = np.array(result.data(0)['statevector'])
+
+    probas = np.zeros((n_repetitions, len(hamiltonian.js), 4), dtype=np.float64)
+
+    uu = np.kron(np.diag([1, 0]), np.diag([1, 0]))
+    ud = np.kron(np.diag([1, 0]), np.diag([0, 1]))
+    du = np.kron(np.diag([0, 1]), np.diag([1, 0]))
+    dd = np.kron(np.diag([0, 1]), np.diag([0, 1]))
+
+    for idx_op, op in enumerate([uu, ud, du, dd]):
+        for idx_term, term in enumerate(hamiltonian.bonds):
+            OP = ls.Operator(circuit.basis, [ls.Interaction(op, [term])])
+            probas[:, idx_term, idx_op] = np.einsum('ji,ji->i', wfs.T.conj(), OP(wfs.T)).real
+
+    probas_sampled = np.random.binomial(N_samples, probas) / N_samples
+    probas_sampled = probas_sampled[..., 0] + probas_sampled[..., 3] - probas_sampled[..., 1] - probas_sampled[..., 2]
+    probas_sampled = probas_sampled.mean(axis=0) * 3  # SU(2) invariance
+    return probas_sampled.dot(np.array(hamiltonian.js))
+
+
 
 
 
@@ -720,7 +805,7 @@ def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, nois
 
 
 
-def compute_gij_qiskit_survivalrate(circuit, new_parameters, N_samples, noise_model):
+def compute_gij_qiskit_survivalrate(circuit, new_parameters, N_samples, n_repetitions, noise_model):
     basis_gates = noise_model.basis_gates
 
     circ = circuit.init_circuit_qiskit()
@@ -729,17 +814,33 @@ def compute_gij_qiskit_survivalrate(circuit, new_parameters, N_samples, noise_mo
 
     circ = circuit.act_psi_qiskit(circ, new_parameters, inverse=True)
     circ = circuit.act_dimerization_qiskit(circ, inverse=True)
-    circ.save_amplitudes([0])
+    circ.save_statevector(pershot=True)
 
     t = time()
 
     backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
-    result = qiskit.execute([circ], backend, shots=1).result()
+    result = qiskit.execute([circ], backend, shots=n_repetitions, basis_gates = backend.configuration().basis_gates).result()
     print('noisy simulation with quasm took', time() - t)
 
-    survival = np.abs(result.data(0)['amplitudes'][0]) ** 2
+    survival = np.abs(np.array(result.data(0)['statevector'])[:, 0]) ** 2
     survival = np.clip(survival, a_min=0., a_max=1.)
     
     survival = np.random.binomial(N_samples, survival) / N_samples
 
-    return survival
+    return np.mean(survival)
+
+
+
+
+def compute_wavefunction(circuit, n_repetitions, noise_model):  # no projector allowed in this scenario
+    circ = circuit.init_circuit_qiskit(ancilla = False)
+    circ = circuit.act_dimerization_qiskit(circ)
+    circ = circuit.act_psi_qiskit(circ, circuit.params)
+    circ.save_statevector(pershot=True)
+
+
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+    result = qiskit.execute([circ], backend, shots=n_repetitions, memory=True, basis_gates = backend.configuration().basis_gates).result()
+
+    wfs = np.array(result.data(0)['statevector']) #.mean(axis=0)
+    return wfs

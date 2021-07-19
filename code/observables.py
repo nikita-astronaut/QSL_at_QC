@@ -142,15 +142,17 @@ class Observables(object):
         self.config = config
 
 
-        ### prepare main log ###
-        string = 'gsenergy energy fidelity norm '
-        for _, name in self.observables:
-            string += name + ' '
-        self.main_log.write(string + '\n')
+        if config.write_logs:
+            ### prepare main log ###
+            string = 'gsenergy energy fidelity norm '
+            for _, name in self.observables:
+                string += name + ' '
+            self.main_log.write(string + '\n')
 
         return
 
     def write_logs(self):
+        print('smth entered', flush=True)
         if self.config.test or self.config.N_samples is None:
             force_exact = self.circuit.forces_exact
             for f in force_exact:
@@ -196,11 +198,14 @@ class Observables(object):
         state_proj = self.projector(state)
         norm = np.vdot(state, state_proj)
         energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm
-        
+        print(np.vdot(state, self.hamiltonian(state_proj)) / norm)
+        print(norm)
+        print(np.vdot(self.projector(self.hamiltonian(state)), self.hamiltonian(self.projector(state))) / np.vdot(self.projector(self.hamiltonian(state)), self.projector(self.hamiltonian(state))))
 
         ### compute fidelity ###
         state_proj = state_proj / np.sqrt(np.vdot(state_proj, state_proj))
-        print(norm, np.vdot(state, state))
+        print(norm, np.vdot(state, state), np.vdot(self.hamiltonian.ground_state[0], self.hamiltonian.ground_state[0]))
+        # exit(-1)
         assert np.isclose(np.vdot(state_proj, state_proj), 1.0)
         fidelity = np.abs(np.vdot(self.hamiltonian.ground_state[0], state_proj)) ** 2
         #for i, j in zip(self.hamiltonian.ground_state[0], state_proj):

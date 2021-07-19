@@ -2,6 +2,12 @@ import scipy as sp
 import numpy as np
 import utils
 from time import time
+import mpi4py
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
 
 def gradiend_descend(energy_val, init_values, args, circuit = None, \
                      hamiltonian = None, config = None, projector = None, \
@@ -46,7 +52,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
     parameters = []
 
 
-    circuit.lamb = 0.
+    # circuit.lamb = 0.
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()
@@ -56,8 +62,6 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
         else:
             grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
         print('get all gradients and M_ij', time() - t)
-        print(np.linalg.eigh(ij)[0])
-        exit(-1)
         #print('grads_exact:', grads_exact)
         #print('grads_sampled:', grads)
 
@@ -235,7 +239,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
 
         #circuit.set_parameters(new_params)
 
-        obs.write_logs()
+        if not config.with_mpi or (config.with_mpi and rank == 0):
+            obs.write_logs()
         #state = circuit()
         #assert np.isclose(state.conj().dot(state), 1.0)
         #state_proj = projector(state)
@@ -254,18 +259,22 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
 
     lambdas = 1. * np.ones(100000)
     MT_smoothed = np.eye(len(circuit.params))
+    grad_smoothed = np.zeros(len(circuit.params), dtype=np.float64)
 
     lamb = 0.
     energies = []
     parameters = []
 
     ## ADAM parameters ##
-    beta1 = 0.9
+    beta1 = 0.6
     beta2 = 0.95
     epsilon = 1e-8
 
     v = None
     m = None
+
+    grads_history = []
+    MTs_history = []
 
     for n_iter in range(n_iter):
         t_iter = time()
@@ -273,7 +282,7 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
         #circuit.fix_noise_model_SPSA()
         t = time()
         
-        grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples, 'SPSA')
+        grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples, 'SPSA_realgrad')
         print('get all gradients and M_ij', time() - t)
 
 
@@ -286,7 +295,10 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
         #print('grads SPSA', grads)
         #print('grads exact', grads_exact)
 
-        MT_smoothed = MT_smoothed * (n_iter + 1) / (n_iter + 2) + ij / (n_iter + 2)
+        MTs_history.append(ij)
+        MT_smoothed = np.einsum('ijk,i->jk', np.array(MTs_history)[::-1], beta1 ** np.arange(len(MTs_history)))
+
+        # MT_smoothed = MT_smoothed * (n_iter + 1) / (n_iter + 2) + ij / (n_iter + 2)
         MT2 = MT_smoothed @ MT_smoothed.T.conj()
         eigvals, eigstates = np.linalg.eigh(MT2)
         #assert np.all(eigvals > 0)
@@ -325,8 +337,13 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
 
         m = grads if m is None else m * beta1 + (1 - beta1) * grads
         v = np.vdot(grads, grads) if v is None else v * beta2 + (1. - beta2) * np.vdot(grads, grads)
+        grads_history.append(grads * 1.)
 
-        #grads = m / (np.sqrt(v) + epsilon)
+        grads = np.einsum('ij,i->j', np.array(grads_history)[::-1], beta1 ** np.arange(len(grads_history)))
+        # grads = grads / np.sqrt(np.vdot(grads, grads)) * np.sqrt(np.vdot(np.array(grads_history)[-1], np.array(grads_history)[-1]))
+
+        #grads = m / np.sqrt(np.vdot(m, m)) #  / (np.sqrt(v) + epsilon)
+        #grads_smoothed = grads_smoothed * (n_iter + 1) / (n_iter + 2) + grads / (n_iter + 2)
         grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))
         circuit.forces_SR = grads.copy()
 
@@ -338,19 +355,44 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
         if len(energies) > 0 and circuit.energy > energies[-1] + config.max_energy_increase_threshold:
             circuit.set_parameters(parameters[-1])
             print('energy increase over threshold: from', energies[-1] - hamiltonian.energy_renorm, ' to ', circuit.energy - hamiltonian.energy_renorm)
+            grads_history.pop()
+            MTs_history.pop()
         else:
             circuit.set_parameters(new_params)
 
         energies.append(circuit.energy)
         parameters.append(circuit.get_parameters())
 
-        print('iteration took', time() - t_iter)
-        print('lambda = {:.3f}'.format(circuit.lamb))
-        print('energy from estimation', circuit.energy - hamiltonian.energy_renorm)
-        obs.write_logs()
+        if not config.with_mpi or rank == 0:
+            print('iteration took', time() - t_iter)
+            print('lambda = {:.3f}'.format(circuit.lamb))
+            print('energy from estimation', circuit.energy - hamiltonian.energy_renorm)
+            obs.write_logs()
     return circuit
 
 
+def projected_energy_estimation(obs, init_values, args, n_iter = 40000, lr = 0.003, test = False):
+    circuit, hamiltonian, config, projector = args
+    #energy_noisy = utils.compute_energy_qiskit_hadamardtest(circuit, projector, hamiltonian, config.N_samples // config.n_noise_repetitions, config.n_noise_repetitions, config.noise_model)
+    
+    energies = []
+    overlaps = []
+    for parameters in circuit.params_history[-20:]:
+        circuit.set_parameters(parameters)
+        state = circuit()
+        norm = np.vdot(state, projector(state))
+        energy_exact = np.vdot(state, hamiltonian(projector(state))) / norm - hamiltonian.energy_renorm
+
+        energy_nonproj = np.vdot(state, hamiltonian(state)) - hamiltonian.energy_renorm
+        overlap = np.abs(np.vdot(projector(state) / np.sqrt(norm), hamiltonian.ground_state[0])) ** 2
+        print(energy_nonproj.real, energy_exact.real, overlap)
+        energies.append(energy_exact.real)
+        overlaps.append(overlap)
+    
+    print(np.mean(energies), np.std(energies))
+    print(np.mean(overlaps), np.std(overlaps))
+    exit(-1)
+    
 
 
 def get_all_derivatives(cur_params, circuit, hamiltonian, config, projector):
