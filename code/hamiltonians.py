@@ -80,7 +80,7 @@ class Hamiltonian(object):
             if norm != 0.:
                 gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
 
-        gs_nonsymm = gs_nonsymm * np.sqrt(2)  # FIXME FIXME FIXME
+        # gs_nonsymm = gs_nonsymm * np.sqrt(2)  # FIXME FIXME FIXME
         self.ground_state = gs_nonsymm[np.newaxis, :]
         print(np.vdot(gs_nonsymm, gs_nonsymm))
         assert np.isclose(np.vdot(gs_nonsymm, gs_nonsymm), 1.0)
