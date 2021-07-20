@@ -3,9 +3,22 @@ import sys
 import numpy as np
 from time import time
 import lattice_symmetries as ls
-import qiskit
+#import qiskit
 import scipy
 import scipy.linalg
+import cupy as cp
+from numba import jit
+
+@jit(nopython=True)
+def get_trans(idxs_mapped, idxs_mapped_flip, st_list):
+    permutation = [0]
+    for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
+        if idx in st_list:
+            permutation.append(idx)
+        else:
+            permutation.append(idx_flip)
+    return permutation[1:]
+
 
 def index_to_spin(index, number_spins = 16):
     return (((index.reshape(-1, 1).astype(np.int64) & (1 << np.arange(number_spins).astype(np.int64)))) > 0)
@@ -57,16 +70,22 @@ def get_x_symmetry_map(Lx, Ly, basis, su2=False):
 
     spins = spins[:, map_site]
 
-    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
-    idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly).astype(np.uint64)
+    idxs_mapped2 = np.zeros((len(idxs_mapped), 8), dtype=np.uint64)
+    idxs_mapped2[:, 0] = idxs_mapped
+    rep, _, _ = basis.batched_state_info(idxs_mapped2)
+    rep = rep[:, 0]
+    assert len(np.unique(rep)) == len(rep)
+    return map_site, np.argsort(rep)
+    #idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly).astype(np.uint64)
 
-    permutation = []
-    st_list = basis.states
-    for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
-        if idx in st_list:
-            permutation.append(idx)
-        else:
-            permutation.append(idx_flip)
+    #permutation = [] #get_trans(list(idxs_mapped), list(idxs_mapped_flip), list(basis.states.astype(np.uint64)))
+    #st_list = basis.states
+    #for idx, idx_flip in zip(idxs_mapped, idxs_mapped_flip):
+    #    if idx in st_list:
+    #        permutation.append(idx)
+    #    else:
+    #        permutation.append(idx_flip)
 
     return map_site, np.argsort(np.array(permutation)) #np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
 
@@ -82,6 +101,14 @@ def get_y_symmetry_map(Lx, Ly, basis, su2=False):
     print('y', map_site)
 
     spins = spins[:, map_site]
+
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly).astype(np.uint64)
+    idxs_mapped2 = np.zeros((len(idxs_mapped), 8), dtype=np.uint64)
+    idxs_mapped2[:, 0] = idxs_mapped
+    rep, _, _ = basis.batched_state_info(idxs_mapped2)
+    rep = rep[:, 0]
+    assert len(np.unique(rep)) == len(rep)
+    return map_site, np.argsort(rep)
 
     idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
     idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
@@ -110,6 +137,14 @@ def get_Cx_symmetry_map(Lx, Ly, basis, su2=False):
     print('Cx', map_site)
 
     spins = spins[:, map_site]
+
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly).astype(np.uint64)
+    idxs_mapped2 = np.zeros((len(idxs_mapped), 8), dtype=np.uint64)
+    idxs_mapped2[:, 0] = idxs_mapped
+    rep, _, _ = basis.batched_state_info(idxs_mapped2)
+    rep = rep[:, 0]
+    assert len(np.unique(rep)) == len(rep)
+    return map_site, np.argsort(rep)
 
     idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
     idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
@@ -169,6 +204,15 @@ def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
 
     spins = spins[:, map_site]
 
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly).astype(np.uint64)
+    idxs_mapped2 = np.zeros((len(idxs_mapped), 8), dtype=np.uint64)
+    idxs_mapped2[:, 0] = idxs_mapped
+    rep, _, _ = basis.batched_state_info(idxs_mapped2)
+    rep = rep[:, 0]
+    assert len(np.unique(rep)) == len(rep)
+    return map_site, np.argsort(rep)
+
+
     idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly)
     idxs_mapped_flip = spin_to_index(1 - spins, number_spins = Lx * Ly)
 
@@ -180,6 +224,7 @@ def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
         else:
             permutation.append(idx_flip)
 
+    print('Cy', map_site)
     return map_site, np.argsort(np.array(permutation))
 
 def get_hexagon_rot_symmetry_map(basis, su2=False):
@@ -480,6 +525,7 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
 
         z = time()
         ps = 0.5 - np.dot(states, states_j_proj.T.conj()).conj() / 2.
+        #ps = 0.5 - cp.asnumpy(cp.asarray(states).dot(cp.asarray(states_j_proj.conj().T))).conj() / 2.
         #ps = 0.5 - scipy.linalg.blas.zgemm(1, np.asfortranarray(states), np.asfortranarray(states_j_proj), trans_b = 2).conj() / 2.
         ps_real[..., proj_idx] = ps.real
         ps_imag[..., proj_idx] = ps.imag + 0.5
@@ -512,6 +558,7 @@ def compute_connectivity_sample(state0, states, projector, N_samples, theta=0., 
 
     print('flip mask mean for connectivity: ', np.mean(flip_mask))
     ps = (0.5 - np.dot(state0_proj_inv, states.T) / 2.).real
+    ps = np.clip(ps, a_min=0., a_max=1.)
     N_ups = np.random.binomial(N_samples, ps)
     connectivity = np.sum(flip_mask * (1 - 2 * N_ups / N_samples), axis = 0)
 

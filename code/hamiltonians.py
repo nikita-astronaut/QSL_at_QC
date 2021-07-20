@@ -1,3 +1,5 @@
+import os
+import os.path
 import numpy as np
 import scipy as sp
 from scipy import sparse
@@ -29,7 +31,7 @@ P_ijun = (SSun + np.eye(4)) / 2.
 
 
 class Hamiltonian(object):
-    def __init__(self, basis, unitary, n_qubits, su2, symmetries, permutations, sectors, spin, **kwargs):
+    def __init__(self, basis, unitary, n_qubits, su2, symmetries, permutations, sectors, spin, workdir, **kwargs):
         self.n_qubits = n_qubits
         #self.basis = basis
         self.unitary = unitary
@@ -46,7 +48,13 @@ class Hamiltonian(object):
 
         self._matrix, self._terms, self.bonds, self.js = self._get_Hamiltonian_matrix(**kwargs)
 
-        energy, ground_state = ls.diagonalize(self._matrix, k = 4, dtype=np.complex128)
+
+        if False:#os.path.isfile(os.path.join(workdir, 'ground_state.npy')):
+            energy, ground_state = np.load(os.path.join(workdir, 'energy.npy')), np.load(os.path.join(workdir, 'ground_state.npy'))
+        else:
+            energy, ground_state = ls.diagonalize(self._matrix, k = 1, dtype=np.complex128)
+            np.save(os.path.join(workdir, 'energy.npy'), energy)
+            np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
         print(repr(energy - self.energy_renorm))
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
@@ -94,8 +102,9 @@ class Hamiltonian(object):
         #self.ground_state = ground_state.T
         self.nterms = len(self._terms)
         print('ground state energy:', energy[0] - self.energy_renorm)
-        print('system gap =', energy[1] - energy[0])
-        print(energy[1] - self.energy_renorm)
+        #print('system gap =', energy[1] - energy[0])
+
+        #print(energy[1] - self.energy_renorm)
         #exit(-1)
         self.gse = energy[0]
         #exit(-1)

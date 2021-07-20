@@ -7,7 +7,7 @@ import lattice_symmetries as ls
 import scipy
 import utils
 from time import time
-import qiskit
+#import qiskit
 import mpi4py
 from mpi4py import MPI
 
@@ -1542,3 +1542,35 @@ class SU2_symmetrized_square_5x4(SU2_symmetrized):
 
         return layers, pairs
 
+
+class SU2_symmetrized_square_6x4(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for pattern in [
+                    [(0, 6), (1, 7), (2, 8), (3, 9), (4, 10), (5, 11), (12, 18), (13, 19), (14, 20), (15, 21), (16, 22), (17, 23)], \
+                    [(0, 7), (1, 8), (2, 9), (3, 10), (4, 11), (5, 6), (12, 19), (13, 20), (14, 21), (15, 22), (16, 23), (17, 12)], \
+                    [(0, 18), (1, 19), (2, 20), (3, 21), (4, 22), (5, 23), (6, 12), (7, 13), (8, 14), (9, 15), (10, 16), (11, 17)], \
+                    [(0, 23), (1, 18), (2, 19), (3, 20), (4, 21), (5, 22), (12, 11), (13, 6), (14, 7), (15, 8), (16, 9), (17, 10)], \
+                    [(1, 2), (3, 4), (5, 0), (7, 8), (9, 10), (11, 6), (13, 14), (15, 16), (17, 12), (19, 20), (21, 22), (23, 18)], \
+                    [(0, 11), (1, 6), (2, 7), (3, 8), (4, 9), (5, 10), (12, 23), (13, 18), (14, 19), (15, 20), (16, 21), (17, 22)], \
+                    [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)], \
+                    [(0, 19), (1, 20), (2, 21), (3, 22), (4, 23), (5, 18), (12, 7), (13, 8), (14, 9), (15, 10), (16, 11), (17, 6)]
+                ]:
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+                pairs.append((i, j))
+
+        return layers, pairs
