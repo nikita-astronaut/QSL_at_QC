@@ -86,7 +86,12 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
             print('connectivities')
             for conexact, consampl in zip(der_one_exact, der_one):
                 print(conexact, consampl, np.abs(conexact - consampl))
-
+            print('MTij')
+            for i in range(ij.shape[0]):
+                for j in range(ij.shape[0]):
+                    print(ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j], ij[i, j] - np.conj(der_one)[i] * der_one[j], np.abs(ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j] - (ij[i, j] - np.conj(der_one)[i] * der_one[j])), i, j)
+            print(np.linalg.eigh(ij_exact - np.outer(np.conj(der_one_exact), der_one_exact))[0])
+            print(np.linalg.eigh(ij - np.outer(np.conj(der_one), der_one))[0])
         #np.save('grads_exact.npy', grads_exact)
         #np.save('grads_sampl.npy', grads)
 

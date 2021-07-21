@@ -29,7 +29,8 @@ class ProjectorFull(Projector):
 
         return
 
-    def _init_projector(self, generators, eigenvalues, degrees):
+
+    def _combine_generators(self, generators, eigenvalues, degrees):
         permutations = [np.arange(self.basis_size)]
         maps = [np.arange(self.n_qubits)]
         characters = [1. + 0.0j]
@@ -52,7 +53,7 @@ class ProjectorFull(Projector):
                 permutations_d = []
                 characters_d = []
                 maps_d = []
-                for mm, symm, ch in zip(maps, permutations, characters): 
+                for mm, symm, ch in zip(maps, permutations, characters):
                     permutations_d.append(symm[g])
                     characters_d.append(lamb * ch)
                     maps_d.append(mm[m])
@@ -71,7 +72,10 @@ class ProjectorFull(Projector):
                 characters += ch
             for x in new_maps:
                 maps += x
+        return permutations, maps, characters
 
+    def _init_projector(self, generators, eigenvalues, degrees):
+        permutations, maps, characters = self._combine_generators(generators, eigenvalues, degrees)
 
         total = 1
         for d in degrees:
@@ -82,14 +86,52 @@ class ProjectorFull(Projector):
 
         print('terms in the projector:', total)
 
-        for idx, p in enumerate(permutations):
-            for k in range(idx + 1, len(permutations)):
-                if np.allclose(p, permutations[k]):
+
+        self.list_of_pairs = []
+        added = np.zeros(len(maps))
+        friendless = 0
+        for idx, p in enumerate(maps):
+            friend = False
+            if np.allclose(np.arange(len(maps[0])), p[p]):
+                friendless += 1
+            for k in range(idx + 1, len(maps)):
+                if np.allclose(p, maps[k]):
                     print('coincide', idx, k, p)
                     total -= 1
+                if np.allclose(p, np.argsort(maps[k])):
+                    print(idx, k, 'are friends')
+                    self.list_of_pairs.append((idx, k))
+                    added[idx] = 1
+                    added[k] = 1
+                    friend = True
+            if not friend:
+                print(idx, 'is friendless')
+                if not added[idx]:
+                    self.list_of_pairs.append((idx,))
+
+        print(self.list_of_pairs)
+        assert sum([len(x) for x in self.list_of_pairs]) == len(maps)
         print('unique', total)
+        print('friendless', friendless)
 
 
+        ### speed-up for s3it ###
+        if len(generators) == 4:
+            self.lpermutations, self.lmaps, self.lcharacters = self._combine_generators(generators[:2], eigenvalues[:2], degrees[:2]) 
+            self.rpermutations, self.rmaps, self.rcharacters = self._combine_generators(generators[2:], eigenvalues[2:], degrees[2:])
+        else:
+            self.lpermutations, self.lmaps, self.lcharacters = self._combine_generators(generators, eigenvalues, degrees)
+            self.rpermutations, self.rmaps, self.rcharacters = self._combine_generators(generators, eigenvalues, degrees)
+
+
+        self.left_right_decompositions = []	
+        for idx, p in enumerate(maps):
+            for idxl, l in enumerate(self.lmaps):
+                for idxr, r in enumerate(self.rmaps):
+                    if np.allclose(p, np.argsort(l)[r]):
+                        self.left_right_decompositions.append((idxl, idxr))
+        print(self.left_right_decompositions)
+        assert len(self.left_right_decompositions) == len(maps)
 
 
         def cycles(perm):

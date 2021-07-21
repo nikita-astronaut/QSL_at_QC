@@ -366,7 +366,7 @@ class SU2_symmetrized(Circuit):
         
         if method == 'standard':
             derivatives_sampling = utils.compute_energy_der_sample(self.__call__(), self.der_states, hamiltonian, projector, N_samples, self.config.noise_p)
-            norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples, self.config.noise_p)
+            norm_sampling = self.norm #utils.compute_norm_sample(self.__call__(), projector, N_samples, self.config.noise_p)
             energy_sampling = utils.compute_energy_sample(self.__call__(), hamiltonian, projector, N_samples, self.config.noise_p)
             grad_sampling = (derivatives_sampling / norm_sampling - self.connectivity_sampling * energy_sampling / norm_sampling).real * 2.
 
@@ -1019,7 +1019,7 @@ class SU2_symmetrized(Circuit):
 
         for i in range(len(self.params)):
             self.der_states = self.unitaries[i][0](self.der_states)
-            self.der_states[..., i] = self.derivatives[i][0](np.ascontiguousarray(self.der_states[..., i]))
+            self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
 
             #for idx in range(len(self.params)):
             #    if apply_noise[idx, i]:
@@ -1042,8 +1042,8 @@ class SU2_symmetrized(Circuit):
         print('obtain states for MT ', time() - t)
         metric_tensor = utils.compute_metric_tensor_sample(np.array(self.der_states).T, projector, N_samples, self.config.noise_p)
 
-        connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=0., noise_p = self.config.noise_p) + \
-                        1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=-1, noise_p = self.config.noise_p)
+        connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, noise_p = self.config.noise_p)
+                        #1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=-1, noise_p = self.config.noise_p)
         return metric_tensor, connectivity
 
 

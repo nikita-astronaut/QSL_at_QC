@@ -198,9 +198,9 @@ class Observables(object):
         state_proj = self.projector(state)
         norm = np.vdot(state, state_proj)
         energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm
-        print(np.vdot(state, self.hamiltonian(state_proj)) / norm)
-        print(norm)
-        print(np.vdot(self.projector(self.hamiltonian(state)), self.hamiltonian(self.projector(state))) / np.vdot(self.projector(self.hamiltonian(state)), self.projector(self.hamiltonian(state))))
+        #print(np.vdot(state, self.hamiltonian(state_proj)) / norm)
+        print(norm, 'norm full')
+        #print(np.vdot(self.projector(self.hamiltonian(state)), self.hamiltonian(self.projector(state))) / np.vdot(self.projector(self.hamiltonian(state)), self.projector(self.hamiltonian(state))))
 
         ### compute fidelity ###
         state_proj = state_proj / np.sqrt(np.vdot(state_proj, state_proj))
