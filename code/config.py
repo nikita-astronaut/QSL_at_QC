@@ -19,7 +19,7 @@ import os
 
 class opt_parameters:
     def __init__(self):
-        self.with_mpi = False
+        self.with_mpi = True
         j2 = float(sys.argv[2])
         # n_trial = int(sys.argv[3])
         ### preparing the logging ###
@@ -32,7 +32,7 @@ class opt_parameters:
         self.lagrange = False #True #False#True# True
         self.Z = 300.
 
-        self.test = False# True#False#True#False
+        self.test = False # False#True#False# True#False#True#False
         self.reg = 'diag'
 
         ### setting up geometry and parameters ###
@@ -44,21 +44,21 @@ class opt_parameters:
         self.noise_p = 0.#1e-2#3e-3 #3e-3#3e-3
 
 
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None, spin_inversion=1)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
         self.basis.build()
         
         ### setting up symmetries ###
         self.symmetries = [
             utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
             
         ]
-        self.eigenvalues = [1, 1, 1, 1]#, 1, 1]#1, -1, 1]#, 1]
-        self.sectors = [0, 0, 0, 0]#, 0, 0]#[0, 2, 0]#, 0]  # in Toms notation
-        self.degrees = [5, 4, 2, 2]#, 4, 2]#[4, 4, 2]#, 2]
+        self.eigenvalues = []#1, 1, 1, 1]#, 1, 1]#1, -1, 1]#, 1]
+        self.sectors = []#0, 0, 0, 0]#, 0, 0]#[0, 2, 0]#, 0]  # in Toms notation
+        self.degrees = []#6, 2, 4, 2]#, 4, 2]#[4, 4, 2]#, 2]
 
         self.unitary_no = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
         self.unitary_neel = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
@@ -93,8 +93,9 @@ class opt_parameters:
 
         self.dimerization = [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)] if j2 > 0.7 else [(0, 5), (10, 15), (1, 6), (11, 16), (2, 7), (12, 17), (3, 8), (13, 18), (4, 9), (14, 19)]#[(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
         #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7)]#, (8, 9), (10, 11), (12, 13)]
-        #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)]
-        self.circuit = circuits.SU2_symmetrized_square_5x4
+        self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)]
+        #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
+        self.circuit = circuits.SU2_symmetrized_square_6x4
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'subl' : self.subl, \
@@ -121,17 +122,17 @@ class opt_parameters:
 
 
         self.optimizer = optimizers.Optimizer
-        self.algorithm = optimizers.natural_gradiend_descend #SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
+        self.algorithm = optimizers.natural_gradiend_descend#SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
         self.write_logs = True
 
-        self.opt_params_dict = {'lr' : 3e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
-        self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = 2e-1; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
+        self.opt_params_dict = {'lr' : 1e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = None; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 
 
         #### stochastic parameters ####
         self.N_samples = 2 ** 14
-        self.SR_eig_cut = 3e-3
+        self.SR_eig_cut = 3e-2
         self.SR_diag_reg = 0.
 
 

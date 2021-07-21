@@ -6,7 +6,6 @@ import lattice_symmetries as ls
 #import qiskit
 import scipy
 import scipy.linalg
-import cupy as cp
 from numba import jit
 
 @jit(nopython=True)
@@ -517,18 +516,45 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
     ctr = 0
     ps_real = np.empty((len(states), len(states), projector.nterms), dtype=np.float64)
     ps_imag = np.empty((len(states), len(states), projector.nterms), dtype=np.float64)
-    
-    for proj_idx in range(projector.nterms):
+    #states = np.asfortranarray(states)
+
+    statesL = np.zeros((len(projector.lpermutations), states.shape[0], states.shape[1]), dtype=np.complex128)
+    statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), states.shape[0], states.shape[1]), dtype=np.complex128))
+
+    states = np.ascontiguousarray(states)
+
+    for idxl, perm in enumerate(projector.lpermutations):
         z = time()
-        states_j_proj = projector(states, proj_idx)#.conj() # np.array([projector(states[j], proj_idx) for j in range(len(states))]).conj(
+        for j in range(states.shape[0]):
+            statesL[idxl, j, :] = states[j, perm]
         t_proj += time() - z
+    z = time()
+    for idxr, perm in enumerate(projector.rpermutations):
+        for j in range(states.shape[0]):
+            statesR[idxr, j, :] = states[j, perm].conj()
+    t_proj += time() - z
+
+    #for proj_idx in range(projector.nterms):
+    for pair_idxs in projector.list_of_pairs:
+        #z = time()
+        #states_j_proj = projector(states, proj_idx)#.conj() # np.array([projector(states[j], proj_idx) for j in range(len(states))]).conj(
+        #t_proj += time() - z
 
         z = time()
-        ps = 0.5 - np.dot(states, states_j_proj.T.conj()).conj() / 2.
+        proj_idx = pair_idxs[0]
+        l, r = projector.left_right_decompositions[proj_idx]
+        
+        #ps = 0.5 - scipy.linalg.blas.zher2k(1., states, states_j_proj).conj() / 4.
+        ps = 0.5 - np.dot(statesL[l], statesR[r].T).conj() / 2.
+        #ps = 0.5 - np.dot(states, states_j_proj.T.conj()).conj() / 2.
         #ps = 0.5 - cp.asnumpy(cp.asarray(states).dot(cp.asarray(states_j_proj.conj().T))).conj() / 2.
         #ps = 0.5 - scipy.linalg.blas.zgemm(1, np.asfortranarray(states), np.asfortranarray(states_j_proj), trans_b = 2).conj() / 2.
         ps_real[..., proj_idx] = ps.real
         ps_imag[..., proj_idx] = ps.imag + 0.5
+
+        if len(pair_idxs) == 2:
+            ps_real[..., pair_idxs[1]] = ps.real.T
+            ps_imag[..., pair_idxs[1]] = -(ps.imag + 0.5).T
 
         t_norm += time() - z
 
@@ -546,21 +572,30 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
     return MT
 
 
-def compute_connectivity_sample(state0, states, projector, N_samples, theta=0., noise_p = 0.):
+def compute_connectivity_sample(state0, states, projector, N_samples, noise_p = 0.):
     t = time()
-    thetafull = np.exp(1.0j * np.pi / 2. * theta)
+    # thetafull = np.exp(1.0j * np.pi / 2. * theta)
 
-    state0_proj_inv = np.array([projector(state0, proj_idx, inv=True) / thetafull for proj_idx in range(projector.nterms)]).conj()
+    state0_proj_inv = np.array([projector(state0, proj_idx, inv=True) for proj_idx in range(projector.nterms)]).conj()
 
 
     flip_mask = np.ones(shape=(projector.nterms, states.shape[0])) if noise_p == 0. else 1. - 2 * (np.random.uniform(0, 1, size=(projector.nterms, states.shape[0])) < noise_p)
 
 
     print('flip mask mean for connectivity: ', np.mean(flip_mask))
-    ps = (0.5 - np.dot(state0_proj_inv, states.T) / 2.).real
-    ps = np.clip(ps, a_min=0., a_max=1.)
-    N_ups = np.random.binomial(N_samples, ps)
-    connectivity = np.sum(flip_mask * (1 - 2 * N_ups / N_samples), axis = 0)
+    ps_general = np.dot(state0_proj_inv, states.T)
+    ps_real = (0.5 - ps_general / 2.).real
+    ps_imag = (0.5 + 1.0j * ps_general / 2.).real
+
+    ps_real = np.clip(ps_real, a_min=0., a_max=1.)
+    ps_imag = np.clip(ps_imag, a_min=0., a_max=1.)
+
+
+    #ps = (0.5 - np.dot(state0_proj_inv, states.T) / 2.).real
+    #ps = np.clip(ps, a_min=0., a_max=1.)
+    N_ups_real = np.random.binomial(N_samples, ps_real)
+    N_ups_imag = np.random.binomial(N_samples, ps_imag)
+    connectivity = np.sum(flip_mask * (1 - 2 * N_ups_real / N_samples), axis = 0) + 1.0j * np.sum(flip_mask * (1 - 2 * N_ups_imag / N_samples), axis = 0)
 
     print('sample estimation of connectivity(theta) = ', time() - t)
     return connectivity / projector.nterms
