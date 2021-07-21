@@ -82,12 +82,22 @@ class ProjectorFull(Projector):
 
         print('terms in the projector:', total)
 
-        for idx, p in enumerate(permutations):
-            for k in range(idx + 1, len(permutations)):
-                if np.allclose(p, permutations[k]):
+        friendless = 0
+        for idx, p in enumerate(maps):
+            friend = False
+            if np.allclose(np.arange(len(maps[0])), p[p]):
+                friendless += 1
+            for k in range(idx + 1, len(maps)):
+                if np.allclose(p, maps[k]):
                     print('coincide', idx, k, p)
                     total -= 1
+                if np.allclose(p, np.argsort(maps[k])):
+                    print(idx, k, 'are friends')
+                    friend = True
+            if not friend:
+                print(idx, 'is friendless')
         print('unique', total)
+        print('friendless', friendless)
 
 
 
