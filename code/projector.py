@@ -11,8 +11,12 @@ class Projector(object):
             return state.T[self.permutations[n_term], ...].T * self.characters[n_term] if self.characters[n_term] != 1.0 else np.ascontiguousarray(state.T)[self.permutations[n_term], ...].T
 
         state_projected = state * 0.0
-        for permutation, character in zip(self.permutations, self.characters):
-            state_projected += state[..., permutation] * character
+        if not inv:
+            for permutation, character in zip(self.permutations, self.characters):
+                state_projected += state[..., permutation] * character
+        else:
+            for permutation, character in zip(self.permutations_inv, self.characters):
+                state_projected += state[..., permutation] * 1. / character
         return state_projected / len(self.permutations)
         
 
@@ -110,8 +114,8 @@ class ProjectorFull(Projector):
                     self.list_of_pairs.append((idx,))
 
         print(self.list_of_pairs)
-        assert sum([len(x) for x in self.list_of_pairs]) == len(maps)
         print('unique', total)
+        assert sum([len(x) for x in self.list_of_pairs]) == len(maps)
         print('friendless', friendless)
 
 

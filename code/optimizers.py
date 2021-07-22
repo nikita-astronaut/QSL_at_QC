@@ -181,21 +181,15 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
         if config.test or config.N_samples is None:
             MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
             MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
+            MT2 = MT_exact @ MT_exact.T.conj()
+            eigvals, eigstates = np.linalg.eigh(MT2)
+            eigvals += 1e-14
+            #assert np.all(eigvals > 0)
+            MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
+            MTe_inv = np.linalg.inv(MT)
 
             #assert np.allclose(MT_exact, MT_exact.T)
 
-            if config.reg == 'svd':
-                s, u = np.linalg.eigh(MT_exact)
-
-                MTe_inv = np.zeros(MT_exact.shape)
-                keep_lambdas = (s / s.max()) > config.SR_eig_cut
-                for lambda_idx in range(len(s)):
-                    if not keep_lambdas[lambda_idx]:
-                        continue
-                    MTe_inv += (1. / s[lambda_idx]) * \
-                              np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
-            else:
-                MTe_inv = np.linalg.inv(MTe + config.SR_eig_cut * np.eye(MTe.shape[0]))
             #assert np.allclose(MTe_inv, np.linalg.inv(MT_exact))
 
             circuit.forces_exact = grads_exact.copy()
@@ -238,7 +232,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
             else:
                 circuit.set_parameters(new_params)
 
-        energies.append(circuit.energy)
+        energies.append(circuit.energy if config.N_samples is not None else circuit.energy_exact)
         parameters.append(circuit.get_parameters())
 
 
