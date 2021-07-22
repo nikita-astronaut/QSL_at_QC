@@ -50,15 +50,14 @@ class opt_parameters:
         ### setting up symmetries ###
         self.symmetries = [
             utils.get_x_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
-            
         ]
-        self.eigenvalues = []#1, 1, 1, 1]#, 1, 1]#1, -1, 1]#, 1]
-        self.sectors = []#0, 0, 0, 0]#, 0, 0]#[0, 2, 0]#, 0]  # in Toms notation
-        self.degrees = []#6, 2, 4, 2]#, 4, 2]#[4, 4, 2]#, 2]
+        self.eigenvalues = [1, 1, 1, 1]#, 1, 1]#1, -1, 1]#, 1]
+        self.sectors = [0, 0, 0, 0]#, 0, 0]#[0, 2, 0]#, 0]  # in Toms notation
+        self.degrees = [5, 2, 4, 2]#, 4, 2]#[4, 4, 2]#, 2]
 
         self.unitary_no = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
         self.unitary_neel = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
@@ -93,9 +92,10 @@ class opt_parameters:
 
         self.dimerization = [(0, 5), (1, 4), (2, 7), (3, 6), (8, 13), (9, 12), (10, 15), (11, 14)] if j2 > 0.7 else [(0, 5), (10, 15), (1, 6), (11, 16), (2, 7), (12, 17), (3, 8), (13, 18), (4, 9), (14, 19)]#[(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
         #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7)]#, (8, 9), (10, 11), (12, 13)]
-        self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)]
+        #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)]
         #self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]
-        self.circuit = circuits.SU2_symmetrized_square_6x4
+        self.dimerization = [(0, 5), (10, 15), (1, 6), (11, 16), (2, 7), (12, 17), (3, 8), (13, 18), (4, 9), (14, 19)]
+        self.circuit = circuits.SU2_symmetrized_square_5x4
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'subl' : self.subl, \
@@ -131,8 +131,8 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** 14
-        self.SR_eig_cut = 3e-2
+        self.N_samples = None#2 ** 14
+        self.SR_eig_cut = 3e-4
         self.SR_diag_reg = 0.
 
 

@@ -651,10 +651,45 @@ class SU2_symmetrized(Circuit):
     def get_metric_tensor(self, projector, N_samples, method):
         if self.config.test or N_samples is None:
             t = time()
-            MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
+            #MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
 
             left_beforeder = self._initial_state()
+            self.der_states = np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
+            for i in range(len(self.params)):
+                self.der_states = self.unitaries[i][0](self.der_states)
+                self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
+            self.der_states = self.der_states.T
 
+            statesL = np.zeros((len(projector.lpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex128)
+            statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex128))
+
+            self.der_states = np.ascontiguousarray(self.der_states)
+
+            for idxl, perm in enumerate(projector.lpermutations):
+                for j in range(self.der_states.shape[0]):
+                    statesL[idxl, j, :] = self.der_states[j, perm]
+
+            for idxr, perm in enumerate(projector.rpermutations):
+                for j in range(self.der_states.shape[0]):
+                    statesR[idxr, j, :] = self.der_states[j, perm].conj()
+
+            MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
+            for pair_idxs in projector.list_of_pairs:
+                proj_idx = pair_idxs[0]
+                l, r = projector.left_right_decompositions[proj_idx]
+
+
+                p = np.dot(statesL[l], statesR[r].T)
+                if len(pair_idxs) == 1:
+                    MT += p
+                else:
+                    MT += p + p.conj().T
+            
+
+                #ps = 0.5 - np.dot(statesL[l], statesR[r].T).conj() / 2.
+            MT /= len(projector.maps)
+
+            ''' 
             for i in range(len(self.params)):
                 if i > 0:
                     for layer in self.unitaries[i - 1:i]:
@@ -704,8 +739,20 @@ class SU2_symmetrized(Circuit):
             LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
 
             norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
+
+            #for i in range(MT.shape[0]):
+            #    for j in range(MT.shape[1]):
+            #        print(MT[i, j], MT_test[i, j])
+            #exit(-1)
+            
+            '''
+            state = projector(self.__call__(), inv=True)
+            norm = np.vdot(self.__call__(), state)
+            #norm = np.dot(self.__call__().conj(), LEFT)
             MT = MT / norm
 
+            der_i = np.dot(state.conj(), self.der_states.T) / norm
+            '''
             for layer in reversed(self.unitaries_herm):
                 for u_herm in reversed(layer):
                     LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
@@ -722,6 +769,8 @@ class SU2_symmetrized(Circuit):
                     RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
                     LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
 
+            print(der_i, der_i_test)
+            '''
             print('MT exact', time() - t)
             if N_samples is None:
                 return MT, der_i, None, None

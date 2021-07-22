@@ -188,7 +188,13 @@ def get_rot_symmetry_map(Lx, Ly, basis, su2=False):
 
     spins = spins[:, xmap]
 
-    return xmap, np.argsort(spin_to_index(spins, number_spins = Lx * Ly))
+    idxs_mapped = spin_to_index(spins, number_spins = Lx * Ly).astype(np.uint64)
+    idxs_mapped2 = np.zeros((len(idxs_mapped), 8), dtype=np.uint64)
+    idxs_mapped2[:, 0] = idxs_mapped
+    rep, _, _ = basis.batched_state_info(idxs_mapped2)
+    rep = rep[:, 0]
+    assert len(np.unique(rep)) == len(rep)
+    return xmap, np.argsort(rep)
 
 
 def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
