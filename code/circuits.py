@@ -1254,7 +1254,7 @@ class SU2_symmetrized(Circuit):
 
     def _initialize_parameters(self):
         if self.config.mode == 'fresh':
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1 + np.pi / 2.
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01 + np.pi / 4.
 
         if self.config.mode == 'preassigned':
             return self.config.start_params
@@ -1590,6 +1590,39 @@ class SU2_symmetrized_square_5x4(SU2_symmetrized):
                 pairs.append((i, j))
 
         return layers, pairs
+
+class SU2_symmetrized_square_5x4_OBCPBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for pattern in [
+                  [(0, 1), (2, 3), (5, 6), (7, 8), (10, 11), (12, 13), (15, 16), (17, 18)], \
+                  [(0, 6), (1, 7), (2, 8), (3, 9), (10, 16), (11, 17), (12, 18), (13, 19)], \
+                  [(1, 2), (3, 4), (6, 7), (8, 9), (11, 12), (13, 14), (16, 17), (18, 19)], \
+                  [(5, 11), (6, 12), (7, 13), (8, 14), (15, 1), (16, 2), (17, 3), (18, 4)], \
+                  [(5, 1), (6, 2), (7, 3), (8, 4), (15, 11), (16, 12), (17, 13), (18, 14)], \
+                  [(0, 5), (10, 15), (1, 6), (11, 16), (2, 7), (12, 17), (3, 8), (13, 18), (4, 9), (14, 19)], \
+                  [(10, 6), (11, 7), (12, 8), (13, 9), (0, 16), (1, 17), (2, 18), (3, 19)], \
+                  [(0, 15), (5, 10), (1, 16), (6, 11), (2, 17), (7, 12), (3, 18), (8, 13), (4, 19), (9, 14)]
+                ]:
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+                pairs.append((i, j))
+
+        return layers, pairs
+
 
 
 class SU2_symmetrized_square_6x4(SU2_symmetrized):
