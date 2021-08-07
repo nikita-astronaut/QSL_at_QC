@@ -226,7 +226,6 @@ class SU2_symmetrized(Circuit):
         self.n_qubits = Lx * Ly * subl
         self.spin = spin
         self.dimerization = config.dimerization
-        self.lamb = 10.
         super().__init__(Lx * Ly * subl, basis, config, unitary)
 
         # init initial state of the circuit
@@ -658,20 +657,24 @@ class SU2_symmetrized(Circuit):
             for i in range(len(self.params)):
                 self.der_states = self.unitaries[i][0](self.der_states)
                 self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
-            self.der_states = self.der_states.T
+            self.der_states = self.der_states.T.astype(np.complex64)
 
-            statesL = np.zeros((len(projector.lpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex128)
-            statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex128))
+            print('0', flush=True)
+            statesL = np.zeros((len(projector.lpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex64)
+            statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex64))
 
             self.der_states = np.ascontiguousarray(self.der_states)
+            print('1', flush=True)
 
             for idxl, perm in enumerate(projector.lpermutations):
                 for j in range(self.der_states.shape[0]):
                     statesL[idxl, j, :] = self.der_states[j, perm]
+            print('2', flush=True)
 
             for idxr, perm in enumerate(projector.rpermutations):
                 for j in range(self.der_states.shape[0]):
                     statesR[idxr, j, :] = self.der_states[j, perm].conj()
+            print('3', flush=True)
 
             MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
             for pair_idxs in projector.list_of_pairs:
@@ -685,8 +688,9 @@ class SU2_symmetrized(Circuit):
                 else:
                     MT += p + p.conj().T
             
-
+            print('4', flush=True)
                 #ps = 0.5 - np.dot(statesL[l], statesR[r].T).conj() / 2.
+            print('5', flush=True)
             MT /= len(projector.maps)
 
             ''' 
@@ -1276,6 +1280,8 @@ class SU2_symmetrized(Circuit):
             lambda_log = open(os.path.join(self.config.path_to_logs, 'lambda_log.dat'), 'r')
             last_line = lambda_log.readlines()[-1]
             self.lamb = float(last_line)
+            print(eval(arr))
+            #exit(-1)
             return eval(arr)
         except:
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
