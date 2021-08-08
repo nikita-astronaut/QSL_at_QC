@@ -123,6 +123,9 @@ class ProjectorFull(Projector):
         if len(generators) == 4:
             self.lpermutations, self.lmaps, self.lcharacters = self._combine_generators(generators[:2], eigenvalues[:2], degrees[:2]) 
             self.rpermutations, self.rmaps, self.rcharacters = self._combine_generators(generators[2:], eigenvalues[2:], degrees[2:])
+        elif len(generators) == 3:
+            self.lpermutations, self.lmaps, self.lcharacters = self._combine_generators(generators[:1], eigenvalues[:1], degrees[:1])
+            self.rpermutations, self.rmaps, self.rcharacters = self._combine_generators(generators[1:], eigenvalues[1:], degrees[1:])
         else:
             self.lpermutations, self.lmaps, self.lcharacters = self._combine_generators(generators, eigenvalues, degrees)
             self.rpermutations, self.rmaps, self.rcharacters = self._combine_generators(generators, eigenvalues, degrees)

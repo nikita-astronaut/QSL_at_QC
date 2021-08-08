@@ -37,7 +37,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 2000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
     #lambdas = 0.1 * np.concatenate([\
@@ -52,7 +52,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
     parameters = []
 
 
-    # circuit.lamb = 0.
+    circuit.lamb = 1
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()

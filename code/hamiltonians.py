@@ -213,6 +213,7 @@ class HeisenbergSquare(Hamiltonian):
                     else:
                         bonds_j2un.append((site, site_right))
 
+        print(bonds + bonds_j2)
         self.energy_renorm = len(bonds) + len(bondsun) + len(bonds_j2) * j2 + len(bonds_j2un) * j2
         return ls.Operator(self.basis, ([ls.Interaction(operator * 2, bonds)] if len(bonds) > 0 else []) + \
                                        ([ls.Interaction(j2 * operator_j2 * 2, bonds_j2)] if len(bonds_j2) > 0 else []) + \
@@ -297,3 +298,73 @@ class HeisenbergHoneycomb_3x3(Hamiltonian):
                ([[ls.Operator(self.basis, [ls.Interaction(operatorun, [bond])]), 2] for bond in bondsun] if len(bondsun) > 0 else []) + \
                ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
                bonds + bondsun + bonds_j2 + bonds_j2un
+
+
+
+class HeisenbergSquare_5x4(Hamiltonian):
+    def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0., BC='PBC'):
+        #assert Lx % 2 == 0  # here we only ocnsider bipartite systems
+        #assert Ly % 2 == 0
+        assert Lx == 5
+        assert Ly == 4
+
+        operator = P_ij
+        operator_j2 = P_ij
+        operatorun = P_ijun
+        operator_j2un = P_ijun
+
+        n_sites = Lx * Ly
+
+        bonds = []
+        bonds_j2 = []
+        bondsun = []
+        bonds_j2un = []
+
+        for site in range(n_sites):
+            x, y = site % Lx, site // Lx
+
+            site_up = ((x + 1) % Lx) + y * Lx
+            site_right = x + ((y + 1) % Ly) * Lx
+
+            if x + 1 < Lx:# or BC == 'PBC':
+                if self.unitary[site, site_up] == +1:
+                    bonds.append((site, site_up))
+                else:
+                    bondsun.append((site, site_up))
+            if y + 1 < Ly or BC == 'PBC':
+                if self.unitary[site, site_right] == +1:
+                    bonds.append((site, site_right))
+                else:
+                    bondsun.append((site, site_right))
+
+
+            if not np.isclose(j2, 0.0):
+                site_up = ((x + 1) % Lx) + ((y + 1) % Ly) * Lx
+                site_right = ((x + 1) % Lx) + ((y - 1) % Ly) * Lx
+                if (x + 1 >= Lx):
+                    continue
+
+                if (y + 1 < Ly) or BC == 'PBC':
+                    if self.unitary[site, site_up] == +1:
+                        bonds_j2.append((site, site_up))
+                    else:
+                        bonds_j2un.append((site, site_up))
+                if (y - 1 >= 0) or BC == 'PBC':
+                    if self.unitary[site, site_right] == +1:
+                        bonds_j2.append((site, site_right))
+                    else:
+                        bonds_j2un.append((site, site_right))
+
+        print(bonds)
+        print(bonds_j2)
+        self.energy_renorm = len(bonds) + len(bondsun) + len(bonds_j2) * j2 + len(bonds_j2un) * j2
+        return ls.Operator(self.basis, ([ls.Interaction(operator * 2, bonds)] if len(bonds) > 0 else []) + \
+                                       ([ls.Interaction(j2 * operator_j2 * 2, bonds_j2)] if len(bonds_j2) > 0 else []) + \
+                                       ([ls.Interaction(operatorun * 2, bondsun)] if len(bondsun) > 0 else []) + \
+                                       ([ls.Interaction(j2 * operator_j2un * 2, bonds_j2un)] if len(bonds_j2un) > 0 else [])), \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 2] for bond in bonds] if len(bonds) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_j2, [bond])]), j2 * 2.] for bond in bonds_j2] if len(bonds_j2) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operatorun, [bond])]), 2] for bond in bondsun] if len(bondsun) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
+               bonds + bondsun + bonds_j2 + bonds_j2un, \
+               [2] * len(bonds) + [2 * j2] * len(bonds_j2)

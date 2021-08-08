@@ -1258,7 +1258,7 @@ class SU2_symmetrized(Circuit):
 
     def _initialize_parameters(self):
         if self.config.mode == 'fresh':
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1 + np.pi / 2.
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.0 + np.pi / 4. * 0.
 
         if self.config.mode == 'preassigned':
             return self.config.start_params
@@ -1284,7 +1284,8 @@ class SU2_symmetrized(Circuit):
             #exit(-1)
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
+            print('initalizing fresh parameters')
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.0 + np.pi / 4. * 0.
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -1597,8 +1598,7 @@ class SU2_symmetrized_square_5x4(SU2_symmetrized):
 
         return layers, pairs
 
-
-class SU2_symmetrized_square_6x4(SU2_symmetrized):
+class SU2_symmetrized_square_5x4_OBCPBC(SU2_symmetrized):
     def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
         super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
         self.n_qubits = Lx * Ly
@@ -1612,15 +1612,49 @@ class SU2_symmetrized_square_6x4(SU2_symmetrized):
         pairs = []
 
         for pattern in [
-                    [(0, 6), (1, 7), (2, 8), (3, 9), (4, 10), (5, 11), (12, 18), (13, 19), (14, 20), (15, 21), (16, 22), (17, 23)], \
-                    [(0, 7), (1, 8), (2, 9), (3, 10), (4, 11), (5, 6), (12, 19), (13, 20), (14, 21), (15, 22), (16, 23), (17, 18)], \
-                    [(0, 18), (1, 19), (2, 20), (3, 21), (4, 22), (5, 23), (6, 12), (7, 13), (8, 14), (9, 15), (10, 16), (11, 17)], \
-                    [(0, 23), (1, 18), (2, 19), (3, 20), (4, 21), (5, 22), (12, 11), (13, 6), (14, 7), (15, 8), (16, 9), (17, 10)], \
-                    [(1, 2), (3, 4), (5, 0), (7, 8), (9, 10), (11, 6), (13, 14), (15, 16), (17, 12), (19, 20), (21, 22), (23, 18)], \
-                    [(0, 11), (1, 6), (2, 7), (3, 8), (4, 9), (5, 10), (12, 23), (13, 18), (14, 19), (15, 20), (16, 21), (17, 22)], \
-                    [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)], \
-                    [(0, 19), (1, 20), (2, 21), (3, 22), (4, 23), (5, 18), (12, 7), (13, 8), (14, 9), (15, 10), (16, 11), (17, 6)]
+                  [(0, 1), (2, 3), (5, 6), (7, 8), (10, 11), (12, 13), (15, 16), (17, 18)], \
+                  [(0, 6), (1, 7), (2, 8), (3, 9), (10, 16), (11, 17), (12, 18), (13, 19)], \
+                  [(1, 2), (3, 4), (6, 7), (8, 9), (11, 12), (13, 14), (16, 17), (18, 19)], \
+                  [(5, 11), (6, 12), (7, 13), (8, 14), (15, 1), (16, 2), (17, 3), (18, 4)], \
+                  [(5, 1), (6, 2), (7, 3), (8, 4), (15, 11), (16, 12), (17, 13), (18, 14)], \
+                  [(0, 5), (10, 15), (1, 6), (11, 16), (2, 7), (12, 17), (3, 8), (13, 18), (4, 9), (14, 19)], \
+                  [(10, 6), (11, 7), (12, 8), (13, 9), (0, 16), (1, 17), (2, 18), (3, 19)], \
+                  [(0, 15), (5, 10), (1, 16), (6, 11), (2, 17), (7, 12), (3, 18), (8, 13), (4, 19), (9, 14)]
                 ]:
+            for pair in pattern:
+                i, j = pair
+
+                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                layers.append(deepcopy(layer))
+                pairs.append((i, j))
+
+        return layers, pairs
+
+
+
+class SU2_symmetrized_square_6x4(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+        for pattern in [
+                    [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15), (16, 17), (18, 19), (20, 21), (22, 23)], \
+                    [(0, 7), (1, 8), (2, 9), (3, 10), (4, 11), (5, 6), (12, 19), (13, 20), (14, 21), (15, 22), (16, 23), (17, 18)], \
+                    [(1, 2), (3, 4), (5, 0), (7, 8), (9, 10), (11, 6), (13, 14), (15, 16), (17, 12), (19, 20), (21, 22), (23, 18)], \
+                    [(0, 23), (1, 18), (2, 19), (3, 20), (4, 21), (5, 22), (12, 11), (13, 6), (14, 7), (15, 8), (16, 9), (17, 10)], \
+                    [(0, 11), (1, 6), (2, 7), (3, 8), (4, 9), (5, 10), (12, 23), (13, 18), (14, 19), (15, 20), (16, 21), (17, 22)], \
+                    [(0, 6), (1, 7), (2, 8), (3, 9), (4, 10), (5, 11), (12, 18), (13, 19), (14, 20), (15, 21), (16, 22), (17, 23)], \
+                    [(0, 19), (1, 20), (2, 21), (3, 22), (4, 23), (5, 18), (12, 7), (13, 8), (14, 9), (15, 10), (16, 11), (17, 6)], \
+                    [(0, 18), (1, 19), (2, 20), (3, 21), (4, 22), (5, 23), (6, 12), (7, 13), (8, 14), (9, 15), (10, 16), (11, 17)]
+                ]:
+
             for pair in pattern:
                 i, j = pair
 
