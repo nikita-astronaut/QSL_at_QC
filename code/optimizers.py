@@ -52,7 +52,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003,
     parameters = []
 
 
-    # circuit.lamb = 0.
+    circuit.lamb = 0.
     for n_iter in range(n_iter):
         t_iter = time()
         cur_params = circuit.get_parameters()
@@ -392,6 +392,56 @@ def projected_energy_estimation(obs, init_values, args, n_iter = 40000, lr = 0.0
     print(np.mean(overlaps), np.std(overlaps))
     exit(-1)
     
+
+def Lanczos_energy_extrapolation(obs, init_values, args):
+    circuit, hamiltonian, config, projector = args
+
+    H_powers = []
+    max_order = config.max_Lanczos_order
+    for H_power in range(2 * max_order + 1 + 1):
+        H_powers.append(utils.get_hamiltonian_power_expectation_sampling(H_power, circuit, hamiltonian, projector, config).real if config.N_samples is not None else \
+                        utils.get_hamiltonian_power_expectation_exact(H_power, circuit, hamiltonian, projector, config).real)
+
+    print(H_powers)
+    X = np.zeros((max_order + 1, max_order + 1), dtype=np.float64)
+    Y = np.zeros((max_order + 1, max_order + 1), dtype=np.float64)
+
+    for i in range(max_order + 1):
+        for j in range(max_order + 1):
+            X[i, j] = H_powers[1 + i + j]
+            Y[i, j] = H_powers[i + j]
+
+    import scipy
+    import scipy.linalg
+    
+    lu, d, _ = scipy.linalg.ldl(Y)
+    assert np.allclose(lu @ d @ lu.T, Y)
+    d_sqrt = np.diag(np.sqrt(np.diag(d)))
+
+    X = np.linalg.inv(d_sqrt) @ np.linalg.inv(lu) @ X @ np.linalg.inv(lu.T) @ np.linalg.inv(d_sqrt)
+    #assert np.allclose(X, X.T)
+
+    C_min = np.linalg.eigh(X)[1][0, :]
+    A_min = np.linalg.inv(d_sqrt) @ np.linalg.inv(lu.T) @ C_min
+    E_min = np.linalg.eigh(X)[0][0]
+
+
+    state = circuit.__call__()
+    state_proj = projector(state)
+    states = [state_proj.copy()]
+    for _ in range(max_order):
+        state_proj = hamiltonian(state_proj) - hamiltonian.energy_renorm * state_proj
+        states.append(state_proj.copy())
+
+    states = np.array(states)
+    state_Lanczos = A_min @ states
+    state_Lanczos /= np.sqrt(np.vdot(state_Lanczos, state_Lanczos))
+
+    print('Lanczos coefficients:', A_min)
+    print('resulting energy:', E_min)
+    print('resulting overlap:', np.abs(np.vdot(state_Lanczos, hamiltonian.ground_state[0])) ** 2)
+
+    exit(-1)
 
 
 def get_all_derivatives(cur_params, circuit, hamiltonian, config, projector):

@@ -226,7 +226,6 @@ class SU2_symmetrized(Circuit):
         self.n_qubits = Lx * Ly * subl
         self.spin = spin
         self.dimerization = config.dimerization
-        self.lamb = 10.
         super().__init__(Lx * Ly * subl, basis, config, unitary)
 
         # init initial state of the circuit
@@ -1278,7 +1277,7 @@ class SU2_symmetrized(Circuit):
             self.lamb = float(last_line)
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01# + np.pi / 4.
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -1604,7 +1603,8 @@ class SU2_symmetrized_square_5x4_OBCPBC(SU2_symmetrized):
         P_ijun = (SSun + np.eye(4)) / 2.
         pairs = []
 
-        for pattern in [
+        for l in range(2):
+            for pattern in [
                   [(0, 1), (2, 3), (5, 6), (7, 8), (10, 11), (12, 13), (15, 16), (17, 18)], \
                   [(0, 6), (1, 7), (2, 8), (3, 9), (10, 16), (11, 17), (12, 18), (13, 19)], \
                   [(1, 2), (3, 4), (6, 7), (8, 9), (11, 12), (13, 14), (16, 17), (18, 19)], \
@@ -1614,12 +1614,12 @@ class SU2_symmetrized_square_5x4_OBCPBC(SU2_symmetrized):
                   [(10, 6), (11, 7), (12, 8), (13, 9), (0, 16), (1, 17), (2, 18), (3, 19)], \
                   [(0, 15), (5, 10), (1, 16), (6, 11), (2, 17), (7, 12), (3, 18), (8, 13), (4, 19), (9, 14)]
                 ]:
-            for pair in pattern:
-                i, j = pair
+                for pair in pattern:
+                    i, j = pair
 
-                layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
-                layers.append(deepcopy(layer))
-                pairs.append((i, j))
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
 
         return layers, pairs
 

@@ -487,6 +487,15 @@ def compute_energy_sample(state, hamiltonian, projector, N_samples, noise_p = 0.
     return energy / projector.nterms
 
 
+def get_hamiltonian_power_expectation_exact(H_power, circuit, hamiltonian, projector, config):
+    state = circuit.__call__()
+    state_proj = projector(state)
+
+    for _ in range(H_power):
+        state_proj = hamiltonian(state_proj) - hamiltonian.energy_renorm * state_proj
+    return np.vdot(state, state_proj)
+
+
 def compute_energy_sample_symmetrized(state, hamiltonian, projector, N_samples):
     bond_groups, idxs_groups = get_symmetry_unique_bonds(hamiltonian.bonds, projector.maps)
 
