@@ -204,7 +204,7 @@ class Observables(object):
 
         ### compute fidelity ###
         state_proj = state_proj / np.sqrt(np.vdot(state_proj, state_proj))
-        print(norm, np.vdot(state, state), np.vdot(self.hamiltonian.ground_state[0], self.hamiltonian.ground_state[0]))
+        #print(norm, np.vdot(state, state), np.vdot(self.hamiltonian.ground_state[0], self.hamiltonian.ground_state[0]))
         # exit(-1)
         assert np.isclose(np.vdot(state_proj, state_proj), 1.0)
         fidelity = np.abs(np.vdot(self.hamiltonian.ground_state[0], state_proj)) ** 2

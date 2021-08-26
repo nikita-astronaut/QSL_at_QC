@@ -53,6 +53,8 @@ class opt_parameters:
             utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
+            #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
         ]
         self.eigenvalues = [1, 1, 1]#, 1]#1, -1, 1]#, 1]
@@ -134,8 +136,8 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = None#2 ** 14
-        self.SR_eig_cut = 1e-4
+        self.N_samples = 2 ** int(sys.argv[3]) #int(sys.argv[3])#2 ** int(sys.argv[3])
+        self.SR_eig_cut = 3e-2
         self.SR_diag_reg = 0.
 
 

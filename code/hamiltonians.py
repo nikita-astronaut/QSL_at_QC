@@ -213,6 +213,7 @@ class HeisenbergSquare(Hamiltonian):
                     else:
                         bonds_j2un.append((site, site_right))
 
+        print(bonds + bonds_j2)
         self.energy_renorm = len(bonds) + len(bondsun) + len(bonds_j2) * j2 + len(bonds_j2un) * j2
         return ls.Operator(self.basis, ([ls.Interaction(operator * 2, bonds)] if len(bonds) > 0 else []) + \
                                        ([ls.Interaction(j2 * operator_j2 * 2, bonds_j2)] if len(bonds_j2) > 0 else []) + \
