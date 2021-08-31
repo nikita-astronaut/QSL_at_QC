@@ -305,7 +305,7 @@ class HeisenbergSquare_5x4(Hamiltonian):
     def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0., BC='PBC'):
         #assert Lx % 2 == 0  # here we only ocnsider bipartite systems
         #assert Ly % 2 == 0
-        assert Lx == 5
+        assert Lx == 5 or Lx == 3
         assert Ly == 4
 
         operator = P_ij

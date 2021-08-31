@@ -3,10 +3,10 @@ import numpy as np
 import utils
 from time import time
 import mpi4py
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
+#from mpi4py import MPI
+#comm = MPI.COMM_WORLD
+#rank = comm.Get_rank()
+#size = comm.Get_size()
 
 
 def gradiend_descend(energy_val, init_values, args, circuit = None, \
@@ -393,6 +393,69 @@ def projected_energy_estimation(obs, init_values, args, n_iter = 40000, lr = 0.0
     print(np.mean(overlaps), np.std(overlaps))
     exit(-1)
     
+
+def Lanczos_energy_extrapolation(obs, init_values, args):
+    circuit, hamiltonian, config, projector = args
+
+    H_powers = []
+    max_order = config.max_Lanczos_order
+    for H_power in range(2 * max_order + 1 + 1):
+        H_powers.append(utils.get_hamiltonian_power_expectation_sampling(H_power, circuit, hamiltonian, projector, config).real if config.N_samples is not None else \
+                        utils.get_hamiltonian_power_expectation_exact(H_power, circuit, hamiltonian, projector, config).real)
+
+
+    state = circuit.__call__()
+    print('energy (check):', (H_powers[1]/ H_powers[0] - hamiltonian.energy_renorm))
+    print('energy (exact):', np.vdot(state, hamiltonian(projector(state))) / np.vdot(state, projector(state)) - hamiltonian.energy_renorm)
+    print('all H powers', H_powers)
+    X = np.zeros((max_order + 1, max_order + 1), dtype=np.float64)
+    Y = np.zeros((max_order + 1, max_order + 1), dtype=np.float64)
+
+    for i in range(max_order + 1):
+        for j in range(max_order + 1):
+            X[i, j] = H_powers[1 + i + j]
+            Y[i, j] = H_powers[i + j]
+
+    import scipy
+    import scipy.linalg
+    
+    print('Y', Y)
+    lu, d, _ = scipy.linalg.ldl(Y)
+
+    assert np.allclose(lu @ d @ lu.T, Y)
+    d_sqrt = np.diag(np.sqrt(np.diag(d)))
+    print('\sqrt{D}:', np.diag(d_sqrt))
+
+    Xnew = np.linalg.inv(d_sqrt) @ np.linalg.inv(lu) @ X @ np.linalg.inv(lu.T) @ np.linalg.inv(d_sqrt)
+    print('X after:', Xnew)
+    assert np.allclose(Xnew, Xnew.T)
+
+    C_min = np.linalg.eigh(Xnew)[1][:, 0]
+
+    print('all eigenvalues:', np.linalg.eigh(Xnew)[0] - hamiltonian.energy_renorm)
+    A_min = np.linalg.inv(lu.T) @ np.linalg.inv(d_sqrt) @ C_min
+    E_min = np.linalg.eigh(Xnew)[0][0]
+
+    print('expectation before variable', np.vdot(A_min, X @ A_min) / np.vdot(A_min, Y @ A_min) - hamiltonian.energy_renorm)
+
+
+    state = circuit.__call__()
+    state_proj = projector(state)
+    states = [state_proj.copy() * 1.]
+    for _ in range(max_order):
+        state_proj = hamiltonian(state_proj)# - hamiltonian.energy_renorm * state_proj
+        states.append(state_proj.copy() * 1.0)
+
+    states = np.array(states)
+    print(A_min.shape, states.shape)
+    state_Lanczos = A_min @ states
+    state_Lanczos /= np.sqrt(np.vdot(state_Lanczos, state_Lanczos))
+
+    print('Lanczos coefficients:', A_min)
+    print('resulting energy:', E_min - hamiltonian.energy_renorm, np.vdot(state_Lanczos, hamiltonian(state_Lanczos)).real - hamiltonian.energy_renorm)
+    print('resulting overlap:', np.abs(np.vdot(state_Lanczos, hamiltonian.ground_state[0])) ** 2)
+
+    exit(-1)
 
 
 def get_all_derivatives(cur_params, circuit, hamiltonian, config, projector):

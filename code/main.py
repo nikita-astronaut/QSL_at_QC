@@ -5,10 +5,10 @@ import config as cv_module
 import lattice_symmetries as ls
 import scipy.linalg
 import observables
-import mpi4py
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+#import mpi4py
+#from mpi4py import MPI
+#comm = MPI.COMM_WORLD
+#rank = comm.Get_rank()
 #### TEST #####
 '''
 sx = np.array(
