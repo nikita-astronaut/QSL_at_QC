@@ -7,14 +7,14 @@ import lattice_symmetries as ls
 import scipy
 import utils
 from time import time
-#import qiskit
-import mpi4py
-from mpi4py import MPI
+import qiskit
 
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
+#import mpi4py
+#from mpi4py import MPI
+#comm = MPI.COMM_WORLD
+#rank = comm.Get_rank()
+#size = comm.Get_size()
 
 
 sz = np.array([[1, 0], \
@@ -265,10 +265,10 @@ class SU2_symmetrized(Circuit):
         self.layers, self.pairs = self._get_dimerizarion_layers()
         self.params = self._initialize_parameters()
 
-        #if self.config.with_mpi and rank == 0:
-        comm.Bcast([self.params, MPI.DOUBLE], root = 0)
-        comm.Barrier()
-        print('process', rank, 'parameters', self.params)
+        if self.config.with_mpi and rank == 0:
+            comm.Bcast([self.params, MPI.DOUBLE], root = 0)
+            comm.Barrier()
+            print('process', rank, 'parameters', self.params)
 
         ### defining of unitaries ###
         self._refresh_unitaries_derivatives()
@@ -372,20 +372,18 @@ class SU2_symmetrized(Circuit):
             self.energy = energy_sampling / norm_sampling
 
             if self.config.qiskit:
-                t = time()
+                energy_qiskit_ht = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+
+                print(energy_sampling, energy_qiskit_ht)
+
                 norm_qiskit_ht = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
-                print('norm_hadamardtest fromwf', time() - t)
+                derivatives_qiskit_ht = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+                
+                print(derivatives_sampling)
+                print(derivatives_qiskit_ht)
 
-                t = time()
-                energy_qiskit = []
-                for repetition in range(self.config.n_noise_repetitions):
-                    energy_qiskit.append(utils.compute_energy_qiskit_hadamardtest(self, projector, hamiltonian, self.config.N_samples // self.config.n_noise_repetitions, self.config.noise_model))
-                print('energies:',  energy_qiskit)
-                energy_qiskit = np.mean(energy_qiskit)
-                print('energy_hadamardtest fromwf', time() - t)
-
-                print('energy', energy_sampling, energy_qiskit)
-                print('norm', norm_sampling, norm_qiskit_ht)
+                grad_sampling = (derivatives_qiskit_ht / norm_qiskit_ht - self.connectivity_sampling * energy_qiskit_ht / norm_qiskit_ht).real * 2
+                self.energy = energy_qiskit_ht / norm_qiskit_ht
 
 
 
@@ -659,22 +657,21 @@ class SU2_symmetrized(Circuit):
                 self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
             self.der_states = self.der_states.T.astype(np.complex64)
 
-            print('0', flush=True)
             statesL = np.zeros((len(projector.lpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex64)
             statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), self.der_states.shape[0], self.der_states.shape[1]), dtype=np.complex64))
 
             self.der_states = np.ascontiguousarray(self.der_states)
-            print('1', flush=True)
+
 
             for idxl, perm in enumerate(projector.lpermutations):
                 for j in range(self.der_states.shape[0]):
                     statesL[idxl, j, :] = self.der_states[j, perm]
-            print('2', flush=True)
+
 
             for idxr, perm in enumerate(projector.rpermutations):
                 for j in range(self.der_states.shape[0]):
                     statesR[idxr, j, :] = self.der_states[j, perm].conj()
-            print('3', flush=True)
+
 
             MT = np.zeros((len(self.params), len(self.params)), dtype=np.complex128)
             for pair_idxs in projector.list_of_pairs:
@@ -687,94 +684,15 @@ class SU2_symmetrized(Circuit):
                     MT += p
                 else:
                     MT += p + p.conj().T
-            
-            print('4', flush=True)
-                #ps = 0.5 - np.dot(statesL[l], statesR[r].T).conj() / 2.
-            print('5', flush=True)
+
             MT /= len(projector.maps)
 
-            ''' 
-            for i in range(len(self.params)):
-                if i > 0:
-                    for layer in self.unitaries[i - 1:i]:
-                        for u in layer:
-                            left_beforeder = u(left_beforeder)  # L_i ... L_0 |0>
-            
-                LEFT = left_beforeder.copy()
-                derivative = LEFT * 0.0
-                for der in self.derivatives[i]:
-                    derivative += der(LEFT)
-                LEFT = derivative  # A_i L_{i-1} ... L_0 |0>
-
-                for layer in self.unitaries[i:]:
-                    for u in layer:
-                        LEFT = u(LEFT) # L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
-
-                LEFT = projector(LEFT) # P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
-
-                for layer in reversed(self.unitaries_herm):
-                    for u_herm in reversed(layer):
-                        LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
-
-
-
-                RIGHT = self._initial_state()  # RIGHT = |0>
-                for j in range(i):
-                    for u in self.unitaries[j]:
-                        RIGHT = u(RIGHT)
-                        LEFT = u(LEFT)
-
-
-                for j in range(i, len(self.params)):
-                    derivative = RIGHT * 0.
-                    for der in self.derivatives[j]:
-                        derivative += der(RIGHT)
-
-                    MT[i, j] = np.dot(LEFT.conj(), derivative)
-                    MT[j, i] = np.conj(MT[i, j])
-
-                    for u in self.unitaries[j]:
-                        RIGHT = u(RIGHT) # LEFT = L^+_{j + 1} ... L^+_{N - 1} P L_{N - 1} .. L_i A_i L_{i-1} ... L_0 |0>
-                        LEFT = u(LEFT) # RIGHT = L_j ... L_0 |0>
-
-
-            der_i = np.zeros(len(self.params), dtype=np.complex128)
-            LEFT = self.__call__()  # L_{N-1} ... L_0 |0>
-            LEFT = projector(LEFT)  # P L_{N-1} ... L_0 |0>
-
-            norm = np.dot(self.__call__().conj(), LEFT)  # <psi|P|psi>
-
-            #for i in range(MT.shape[0]):
-            #    for j in range(MT.shape[1]):
-            #        print(MT[i, j], MT_test[i, j])
-            #exit(-1)
-            
-            '''
             state = projector(self.__call__(), inv=True)
             norm = np.vdot(self.__call__(), state)
-            #norm = np.dot(self.__call__().conj(), LEFT)
             MT = MT / norm
 
             der_i = np.dot(state.conj(), self.der_states.T) / norm
-            '''
-            for layer in reversed(self.unitaries_herm):
-                for u_herm in reversed(layer):
-                    LEFT = u_herm(LEFT) # LEFT = L^+_0 L^+_1 ... L^+_{N - 1} P L_{N - 1} .. L_i L_{i-1} ... L_0 |0>
 
-            RIGHT = self._initial_state()   # RIGHT = |0>
-            for i in range(len(self.params)):
-                derivative = RIGHT * 0. + 0.0j
-                for der in self.derivatives[i]:
-                    derivative += der(RIGHT)
-
-                der_i[i] = np.dot(LEFT.conj(), derivative) / norm  # <psi|P|di psi>
-    
-                for u in self.unitaries[i]:
-                    RIGHT = u(RIGHT) # LEFT = L^+_{i + 1} ... L^+_{N - 1} P L_{N - 1} ... L_0 |0>
-                    LEFT = u(LEFT) # RIGHT = L_i ... L_0 |0>
-
-            print(der_i, der_i_test)
-            '''
             print('MT exact', time() - t)
             if N_samples is None:
                 return MT, der_i, None, None
@@ -785,6 +703,10 @@ class SU2_symmetrized(Circuit):
             MT_sample, connectivity = self.get_metric_tensor_sampling(projector, N_samples)
             norm_sampling = utils.compute_norm_sample(self.__call__(), projector, N_samples, self.config.noise_p)
             self.norm = norm_sampling
+
+            if self.config.qiskit:
+                self.norm = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
+
         elif method == 'SPSA':
             MT_sample = np.zeros((len(self.params), len(self.params)), dtype=np.float64)
 
@@ -876,12 +798,15 @@ class SU2_symmetrized(Circuit):
             norm_sampling = 1.
 
         elif method == 'SPSA_realgrad':
+            size = size if self.config.with_mpi else 1
             cur_params = self.params.copy()
             wfs = np.zeros((len(self.params), 2, self.config.n_noise_repetitions // size, len(self.basis.states)), dtype=np.complex128)
             print('basis states len', len(self.basis.states), flush=True)
 
 
             #for i in range(len(self.params) // size * rank, len(self.params) // size * (rank + 1)):
+            print('go for density matrix')
+            
             for i in range(len(self.params)):
                 new_params = cur_params.copy() * 1.
                 new_params[i] += np.pi / 4.  # ??
@@ -1056,47 +981,37 @@ class SU2_symmetrized(Circuit):
 
     def get_metric_tensor_sampling(self, projector, N_samples):
         t = time()
-
-        '''
-        if self.config.noise:
-            apply_noise = np.random.uniform(0, 1, size=(len(self.params), len(self.params))) < self.config.noise_p
-            which_noise = np.floor(np.random.uniform(0, 1, size=(len(self.params), len(self.params))) * 15)
-        '''
-
-        #self.der_states = np.asfortranarray(self._initial_state_noisy_batched(len(self.params), fixed=False).T) # 
         self.der_states = np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
-
-       
-        #apply_noise = np.random.uniform(0, 1, size=(len(self.params), len(self.params))) < self.config.noise_p
-        #which_noise = np.floor(np.random.uniform(0, 1, size=(len(self.params), len(self.params))) * 15).astype(np.int64)
-
         for i in range(len(self.params)):
             self.der_states = self.unitaries[i][0](self.der_states)
             self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
-
-            #for idx in range(len(self.params)):
-            #    if apply_noise[idx, i]:
-            #        print('gates: applied noise on pair', self.pairs[i], 'gate', which_noise[idx, i])
-            #        op = ls.Operator(self.basis_bare, [ls.Interaction(self.noise_operators[which_noise[idx, i]], [self.pairs[i]])])
-            #        self.der_states[:, idx] = op(self.der_states[:, idx])
-
-
-            '''
-            if self.config.noise and np.any(apply_noise[i]):
-                for noise_idx in np.where(apply_noise[i])[0]:
-                    pair = self.pairs[noise_idx]
-                    noise_type = which_noise[i, noise_idx]
-
-                    op = ls.Operator(self.basis, [ls.Interaction(self.noise_operators[noise_type], [pair])])
-                    self.der_states[..., noise_idx] = op(self.der_states[..., noise_idx])
-            '''
-
         
         print('obtain states for MT ', time() - t)
-        metric_tensor = utils.compute_metric_tensor_sample(np.array(self.der_states).T, projector, N_samples, self.config.noise_p)
 
+        metric_tensor = utils.compute_metric_tensor_sample(np.array(self.der_states).T, projector, N_samples, self.config.noise_p)
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, noise_p = self.config.noise_p)
-                        #1.0j * utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, theta=-1, noise_p = self.config.noise_p)
+
+        if self.config.qiskit:
+            connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real') + \
+                              1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag')
+            gij = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real') - \
+                1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag')
+
+        #print(connectivity)
+        #print(connectivity_qiskit_ht)
+
+        
+
+
+        #for i in range(gij.shape[0]):
+        #    for j in range(gij.shape[1]):
+        #        print(i, j, gij[i, j], metric_tensor[i, j])
+        #print(gij)
+        #print(metric_tensor)
+
+
+        if self.config.qiskit:
+            return gij, connectivity_qiskit_ht
         return metric_tensor, connectivity
 
 
@@ -1284,7 +1199,7 @@ class SU2_symmetrized(Circuit):
             #exit(-1)
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01# + np.pi / 4.
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.001 # + np.pi / 4.
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -1629,6 +1544,73 @@ class SU2_symmetrized_square_5x4_OBCPBC(SU2_symmetrized):
                     pairs.append((i, j))
 
         return layers, pairs
+
+
+
+
+class SU2_symmetrized_square_3x4_OBCPBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 1), (3, 4), (6, 7), (9, 10)], \
+                  [(0, 4), (1, 5), (6, 10), (7, 11)], \
+                  [(1, 2), (4, 5), (7, 8), (10, 11)], \
+                  [(3, 7), (4, 8), (9, 1), (10, 2)], \
+                  [(3, 1), (4, 2), (9, 7), (10, 8)], \
+                  [(0, 3), (1, 4), (2, 5), (6, 9), (7, 10), (8, 11)], \
+                  [(6, 4), (7, 5), (0, 10), (1, 11)], \
+                  [(3, 6), (4, 7), (5, 8), (0, 9), (1, 10), (2, 11)]
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pairs
+
+
+class SU2_symmetrized_square_2x4(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(2, 5), (3, 4), (6, 1), (7, 0)], \
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                  [(2, 4), (3, 5), (6, 0), (1, 7)]
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
 
 
 
