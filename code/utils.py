@@ -869,8 +869,8 @@ def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, 
             survivals.append(-1. + 2. * result.data(i)['counts']['0x0'] / N_samples if '0x0' in result.data(i)['counts'].keys() else -1)
 
         survivals = np.array(survivals).reshape((len(hamiltonian.bonds), -1)).mean(axis = -1)
-    #return -survivals.dot(np.array(hamiltonian.js))
-    der.append(survivals.dot(np.array(hamiltonian.js)))
+        #return -survivals.dot(np.array(hamiltonian.js))
+        der.append(survivals.dot(np.array(hamiltonian.js)))
 
     return -np.array(der)
 
