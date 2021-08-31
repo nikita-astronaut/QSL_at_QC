@@ -37,7 +37,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 6000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
     #lambdas = 0.1 * np.concatenate([\
@@ -169,7 +169,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 6000, lr = 0.003, 
             else:
                 MT2 = MT @ MT.T.conj()
                 eigvals, eigstates = np.linalg.eigh(MT2)
-                assert np.all(eigvals > 0)
+                # assert np.all(eigvals > 0)
                 MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT.shape[0]) * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)
                 MT_inv = np.linalg.inv(MT)
                 #MT_inv = np.linalg.inv(MT + config.SR_eig_cut * np.eye(MT.shape[0]))
