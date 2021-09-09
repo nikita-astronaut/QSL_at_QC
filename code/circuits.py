@@ -10,11 +10,11 @@ from time import time
 import qiskit
 
 
-#import mpi4py
-#from mpi4py import MPI
-#comm = MPI.COMM_WORLD
-#rank = comm.Get_rank()
-#size = comm.Get_size()
+import mpi4py
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 
 sz = np.array([[1, 0], \
@@ -263,13 +263,19 @@ class SU2_symmetrized(Circuit):
 
         ### defining operator locs ###
         self.layers, self.pairs = self._get_dimerizarion_layers()
-        self.params = self._initialize_parameters()
 
-        if self.config.with_mpi and rank == 0:
+
+        if not self.config.with_mpi or (self.config.with_mpi and rank == 0):
+            self.params = self._initialize_parameters()
+        else:
+            self.params = np.zeros(len(self.layers), dtype=np.float64)
+
+        if self.config.with_mpi:# and rank == 0:
             comm.Bcast([self.params, MPI.DOUBLE], root = 0)
             comm.Barrier()
-            print('process', rank, 'parameters', self.params)
+        print('process', rank, 'parameters', self.params, len(self.layers), flush=True)
 
+        
         ### defining of unitaries ###
         self._refresh_unitaries_derivatives()
 
@@ -372,19 +378,63 @@ class SU2_symmetrized(Circuit):
             self.energy = energy_sampling / norm_sampling
 
             if self.config.qiskit:
-                energy_qiskit_ht = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+                ### computation of <E> ###
+                if not self.config.with_mpi:
+                    energy_qiskit_ht = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+                else:
+                    energy_qiskit_ht_part = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model) 
 
-                print(energy_sampling, energy_qiskit_ht)
+                    energy_qiskit_ht = np.array([0.0])
+                    energy_qiskit_ht_part = np.array([energy_qiskit_ht_part])
+                    print('process', rank, 'energy part before ', energy_qiskit_ht_part)
+                    comm.Allreduce(energy_qiskit_ht_part, energy_qiskit_ht, op=MPI.SUM)
+                    comm.Barrier()
+                    print('process', rank, 'energy total after', energy_qiskit_ht)
+                    energy_qiskit_ht /= size
+                    energy_qiskit_ht = energy_qiskit_ht[0]
+                print(energy_qiskit_ht, energy_sampling, 'comparison qiskit | samplint of energy')
 
-                norm_qiskit_ht = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
-                derivatives_qiskit_ht = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+
+                ### computation of <N> ###
+                if not self.config.with_mpi:
+                    norm_qiskit_ht = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
+                else:
+                    norm_qiskit_ht_part = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
+
+                    norm_qiskit_ht = np.array([0.])
+                    norm_qiskit_ht_part = np.array([norm_qiskit_ht_part])
+                    print('process', rank, 'norm part before ', norm_qiskit_ht_part)
+                    comm.Allreduce(norm_qiskit_ht_part, norm_qiskit_ht, op=MPI.SUM)
+                    comm.Barrier()
+                    print('process', rank, 'norm total after', norm_qiskit_ht)
+                    norm_qiskit_ht /= size
+
+                    norm_qiskit_ht = norm_qiskit_ht[0]
+
+                print(norm_qiskit_ht, norm_sampling, 'comparison qiskit | samplint of norm')
                 
+
+
+                ### computation of grad<E> ###                
+                if not self.config.with_mpi:
+                    derivatives_qiskit_ht = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model, 0, len(projector.cycl))
+                else:
+                    derivatives_qiskit_ht_part = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model, rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size)
+
+                    derivatives_qiskit_ht = derivatives_qiskit_ht_part * 0. 
+
+                    print('process', rank, 'gradient part before ', derivatives_qiskit_ht_part)
+                    comm.Allreduce(derivatives_qiskit_ht_part, derivatives_qiskit_ht, op=MPI.SUM)
+                    comm.Barrier()
+                    print('process', rank, 'gradient total after', derivatives_qiskit_ht)
+                    derivatives_qiskit_ht /= size
+
                 print(derivatives_sampling)
                 print(derivatives_qiskit_ht)
+                print('comparison qiskit | samplint of grad')
 
                 grad_sampling = (derivatives_qiskit_ht / norm_qiskit_ht - self.connectivity_sampling * energy_qiskit_ht / norm_qiskit_ht).real * 2
                 self.energy = energy_qiskit_ht / norm_qiskit_ht
-
 
 
         elif method == 'SPSA':
@@ -992,20 +1042,51 @@ class SU2_symmetrized(Circuit):
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, noise_p = self.config.noise_p)
 
         if self.config.qiskit:
-            connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real') + \
-                              1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag')
-            gij = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real') - \
-                1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag')
+            ### computation of <A_i> ###
+            if not self.config.with_mpi:
+                connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', 0, len(projector.cycl)) + \
+                                  1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', 0, len(projector.cycl))
 
-        #print(connectivity)
-        #print(connectivity_qiskit_ht)
+            else:
+                connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size) + \
+                                       1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size)
+
+                connectivity_qiskit_ht_part = connectivity_qiskit_ht.copy()# * 0. + 0.0j
+               
+                print('process', rank, 'connectivity part before ', connectivity_qiskit_ht_part, len(projector.cycl), size, flush=True)
+                print(connectivity_qiskit_ht_part.shape, connectivity_qiskit_ht.shape, connectivity_qiskit_ht_part.dtype, connectivity_qiskit_ht.dtype, flush=True)
+                comm.Allreduce(connectivity_qiskit_ht_part, connectivity_qiskit_ht, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'connectivity total after', connectivity_qiskit_ht, flush=True)
+                connectivity_qiskit_ht /= size
+
+
+            ### computation of G_ij ###
+            if not self.config.with_mpi:
+                gij = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', 0, len(projector.cycl)) - \
+                    1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', 0, len(projector.cycl))
+            else:
+                gij_part = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size) - \
+                    1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size)
+
+                gij = gij_part * 0.
+
+                print('process', rank, 'gij part before ', gij_part)
+                comm.Allreduce(gij_part, gij, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'gij total after', gij)
+                gij /= size
+
+        print(connectivity)
+        print(connectivity_qiskit_ht)
+        print('comparison connectivity sampling | qiskit')
 
         
 
-
-        #for i in range(gij.shape[0]):
-        #    for j in range(gij.shape[1]):
-        #        print(i, j, gij[i, j], metric_tensor[i, j])
+        print('comparison gij sampling | qiskit')
+        for i in range(gij.shape[0]):
+            for j in range(gij.shape[1]):
+                print(i, j, gij[i, j], metric_tensor[i, j])
         #print(gij)
         #print(metric_tensor)
 
@@ -1199,7 +1280,7 @@ class SU2_symmetrized(Circuit):
             #exit(-1)
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.001 # + np.pi / 4.
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.1 # + np.pi / 4.
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -1597,11 +1678,11 @@ class SU2_symmetrized_square_2x4(SU2_symmetrized):
 
         for l in range(1):
             for pattern in [
-                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
-                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
-                  [(2, 5), (3, 4), (6, 1), (7, 0)], \
                   [(0, 2), (1, 3), (4, 6), (5, 7)], \
-                  [(2, 4), (3, 5), (6, 0), (1, 7)]
+                  [(2, 5), (3, 4), (6, 1), (7, 0)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(2, 4), (3, 5), (6, 0), (1, 7)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
                 ]:
                 for pair in pattern:
                     i, j = pair

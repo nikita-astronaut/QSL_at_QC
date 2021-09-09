@@ -3,10 +3,10 @@ import numpy as np
 import utils
 from time import time
 import mpi4py
-#from mpi4py import MPI
-#comm = MPI.COMM_WORLD
-#rank = comm.Get_rank()
-#size = comm.Get_size()
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 
 def gradiend_descend(energy_val, init_values, args, circuit = None, \
@@ -37,7 +37,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 600, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
     #lambdas = 0.1 * np.concatenate([\
@@ -52,7 +52,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
     parameters = []
 
 
-    circuit.lamb = 1
+    circuit.lamb = 3
     max_iter = n_iter
     for n_iter in range(n_iter):
         t_iter = time()
@@ -241,6 +241,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
 
         if not config.with_mpi or (config.with_mpi and rank == 0):
             obs.write_logs()
+
+        print(rank, new_params, 'new parameters afte update are')
         #state = circuit()
         #assert np.isclose(state.conj().dot(state), 1.0)
         #state_proj = projector(state)

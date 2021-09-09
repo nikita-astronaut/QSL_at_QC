@@ -791,7 +791,7 @@ def compute_norm_qiskit_hadamardtest(circuit, projector, N_samples, noise_model)
 
 
 
-def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, real_imag):
+def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, real_imag, idx_from, idx_to):
     backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model, max_parallel_experiments=len(projector.cycl) * len(circuit.params))
 
     connectivities = []
@@ -808,6 +808,8 @@ def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, nois
         circ.u1(phase, circuit.n_qubits)  # for real/imag
 
         for idx, cycl in enumerate(projector.cycl):
+            if idx not in range(idx_from, idx_to):
+                continue
             current_circ = circ.copy('circuit_projector_{:d}'.format(idx))
 
             pair_permutations = projector.all_pair_permutations[idx]
@@ -823,14 +825,14 @@ def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, nois
 
     survivals = []
 
-    for i in range(len(projector.cycl) * len(circuit.params)):
+    for i in range(len(projector_circuits)):
         survivals.append(-1. + 2. * result.data(i)['counts']['0x0'] / N_samples if '0x0' in result.data(i)['counts'].keys() else -1)
     connectivities = np.array(survivals).reshape((len(circuit.params), -1)).mean(axis=-1)
 
-    return connectivities
+    return -connectivities
 
 
-def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, noise_model):
+def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, noise_model, idx_from, idx_to):
     backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model, \
                                                  max_parallel_experiments=len(projector.cycl) * len(hamiltonian.bonds))# * len(circuit.params))
 
@@ -851,6 +853,9 @@ def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, 
 
             
             for idx, cycl in enumerate(projector.cycl):
+                if idx not in range(idx_from, idx_to):
+                    continue
+
                 current_circ = circ_ham.copy('circuit_projector_{:d}_{:d}'.format(j_param, idx))
 
                 pair_permutations = projector.all_pair_permutations[idx]
@@ -913,7 +918,7 @@ def compute_energy_qiskit_hadamardtest(circuit, hamiltonian, projector, N_sample
     return survivals.dot(np.array(hamiltonian.js))
 
 
-def compute_gij_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, real_imag):
+def compute_gij_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, real_imag, idx_from, idx_to):
     backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model, \
                                                  max_parallel_experiments=len(projector.cycl) * len(circuit.params) ** 2)
 
@@ -939,6 +944,8 @@ def compute_gij_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, 
 
 
             for idx, cycl in enumerate(projector.cycl):
+                if idx not in range(idx_from, idx_to):
+                    continue
                 current_circ = circ.copy('circuit_projector_{:d}'.format(idx))
 
                 pair_permutations = projector.all_pair_permutations[idx]
@@ -959,12 +966,12 @@ def compute_gij_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, 
     ctr = 0
     for i_param in range(len(circuit.params)):
         for j_param in range(len(circuit.params)):
-            for proj in range(len(projector.cycl)):
+            for proj in range(idx_from, idx_to):
                 if j_param < i_param:
                     continue
                 gij[i_param, j_param] += survivals[ctr]
                 ctr += 1
-    gij /= len(projector.cycl) #[i_param, j_param] = np.mean(survivals)
+    gij /= len(range(idx_from, idx_to)) #[i_param, j_param] = np.mean(survivals)
 
     print('total time', time() - t_total)
     for i in range(len(circuit.params)):
@@ -1056,3 +1063,36 @@ def compute_wavefunction(circuit, n_repetitions, noise_model):  # no projector a
 
     wfs = np.array(result.data(0)['statevector']) #.mean(axis=0)
     return wfs
+
+
+def compute_energy_qiskit_fromshift(circuit, hamiltonian, N_samples, n_repetitions, noise_model):  # no projector allowed in this scenario
+    circ = circuit.init_circuit_qiskit(ancilla = False)
+    circ = circuit.act_dimerization_qiskit(circ)
+    circ = circuit.act_psi_qiskit(circ, circuit.params)
+    circ.save_statevector(pershot=True)
+
+
+    backend = qiskit.providers.aer.QasmSimulator(method='statevector', noise_model=noise_model)
+    result = qiskit.execute([circ], backend, shots=n_repetitions, memory=True, basis_gates = backend.configuration().basis_gates).result()
+
+    wfs = np.array(result.data(0)['statevector'])
+
+    probas = np.zeros((n_repetitions, len(hamiltonian.js), 4), dtype=np.float64)
+
+    uu = np.kron(np.diag([1, 0]), np.diag([1, 0]))
+    ud = np.kron(np.diag([1, 0]), np.diag([0, 1]))
+    du = np.kron(np.diag([0, 1]), np.diag([1, 0]))
+    dd = np.kron(np.diag([0, 1]), np.diag([0, 1]))
+
+    for idx_op, op in enumerate([uu, ud, du, dd]):
+        for idx_term, term in enumerate(hamiltonian.bonds):
+            OP = ls.Operator(circuit.basis, [ls.Interaction(op, [term])])
+            probas[:, idx_term, idx_op] = np.einsum('ji,ji->i', wfs.T.conj(), OP(wfs.T)).real
+
+    probas_sampled = np.random.binomial(N_samples, probas) / N_samples
+    probas_sampled = probas_sampled[..., 0] + probas_sampled[..., 3] - probas_sampled[..., 1] - probas_sampled[..., 2]
+    probas_sampled = probas_sampled.mean(axis=0) * 3  # SU(2) invariance
+    return probas_sampled.dot(np.array(hamiltonian.js))
+
+
+
