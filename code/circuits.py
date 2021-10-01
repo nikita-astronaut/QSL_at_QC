@@ -2257,3 +2257,84 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
                     layers.append(deepcopy(layer))
         return layers, pair
 
+
+
+
+class TFIM_1xL(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+
+
+        patterns = []
+
+        ### pattern NN vertical odd ###
+        for nlayers in range(4):
+            for x in range(self.Ly):
+                layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
+            for x in range(self.Ly):
+                layers.append([[(x), sx]])
+
+        return layers, []
+
+
+    def _initial_state(self):
+        if self.ini_state is not None:
+            return self.ini_state.copy()
+
+        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
+        state[0] = 1.
+
+        if self.dimerization == 'AFM':
+            for i in np.arange(0, self.n_qubits, 2):
+                op = ls.Operator(self.basis_bare, [ls.Interaction(sx, [(i,)])])
+                state = op(state)
+        else:
+            for i in np.arange(0, self.n_qubits):
+                op = ls.Operator(self.basis_bare, [ls.Interaction(np.array([[1, 1], [-1, -1]]) / np.sqrt(2), [(i,)])])
+                state = op(state)
+
+        assert np.isclose(np.dot(state.conj(), state), 1.0)
+
+        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
+        for i in range(self.basis.number_states):
+            x = self.basis.states[i]
+            _, _, norm = self.basis.state_info(x)
+            state_su2[i] = state[self.basis_bare.index(x)] / norm
+
+
+        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
+        return state_su2
+
+
+    def _refresh_unitaries_derivatives(self, reduced = False):
+        self.unitaries = []
+        self.unitaries_herm = []
+        self.derivatives = []
+
+        for i in range(len(self.params)):
+            unitaries_layer = []
+            unitaries_herm_layer = []
+            derivatives_layer = []
+
+            par = self.params[i]
+
+            for pair, operator in self.layers[i]:
+                unitaries_layer.append(ls.Operator(self.basis, [ls.Interaction(scipy.linalg.expm(1.0j * par * operator), [pair])]))
+                if not reduced:
+                    unitaries_herm_layer.append(ls.Operator(self.basis, [ls.Interaction(scipy.linalg.expm(-1.0j * par * operator), [pair])]))
+                    derivatives_layer.append(ls.Operator(self.basis, [ls.Interaction(1.0j * operator, [pair])]))
+
+            
+            self.unitaries.append(unitaries_layer)
+            if not reduced:
+                self.unitaries_herm.append(unitaries_herm_layer)
+                self.derivatives.append(derivatives_layer)
+        return
+

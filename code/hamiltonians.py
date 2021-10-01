@@ -418,3 +418,27 @@ class HeisenbergChain(Hamiltonian):
                ([[ls.Operator(self.basis, [ls.Interaction(operator_j2un, [bond])]), j2 * 2.] for bond in bonds_j2un] if len(bonds_j2un) > 0 else []), \
                bonds + bondsun + bonds_j2 + bonds_j2un, \
                [2] * len(bonds) + [2 * j2] * len(bonds_j2)
+
+
+class TFIMChain(Hamiltonian):
+    def _get_Hamiltonian_matrix(self, Lx, Ly, h, xBC='PBC', yBC = 'PBC'):
+        operator = np.kron(sz, sz)
+        operator_h = sx
+
+        n_sites = Lx * Ly
+
+        bonds = []
+        bonds_j2 = []
+
+
+        bonds_j2 = list(np.arange(Lx * Ly))
+        for site in range(n_sites):
+            bonds.append((site, (site + 1) % n_sites))
+
+        self.energy_renorm = 0.0
+        return ls.Operator(self.basis, ([ls.Interaction(operator, bonds)] if len(bonds) > 0 else []) + \
+                                       ([ls.Interaction(h * operator_h, bonds_j2)] if len(bonds_j2) > 0 else [])), \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator, [bond])]), 1] for bond in bonds] if len(bonds) > 0 else []) + \
+               ([[ls.Operator(self.basis, [ls.Interaction(operator_h, [bond])]), h] for bond in bonds_j2] if len(bonds_j2) > 0 else []) + [] + [], \
+               bonds + bonds_j2, \
+               [1] * len(bonds) + [h] * len(bonds_j2)

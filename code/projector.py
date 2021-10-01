@@ -40,7 +40,7 @@ class ProjectorFull(Projector):
         characters = [1. + 0.0j]
 
         if len(generators) == 0:
-            return maps, permutations, characters
+            return permutations, maps, characters
 
         for generator, eigenvalue, degree in zip(generators, eigenvalues, degrees):
             m, g = generator
