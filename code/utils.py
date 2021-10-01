@@ -602,20 +602,20 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
     ps_imag = np.empty((len(states), len(states), projector.nterms), dtype=np.float64)
     #states = np.asfortranarray(states)
 
-    statesL = np.zeros((len(projector.lpermutations), states.shape[0], states.shape[1]), dtype=np.complex128)
-    statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), states.shape[0], states.shape[1]), dtype=np.complex128))
+    statesL = np.zeros((len(projector.lpermutations), states.shape[0], states.shape[1]), dtype=np.complex64)
+    statesR = np.ascontiguousarray(np.zeros((len(projector.rpermutations), states.shape[0], states.shape[1]), dtype=np.complex64))
 
     states = np.ascontiguousarray(states)
 
     for idxl, perm in enumerate(projector.lpermutations):
         z = time()
         for j in range(states.shape[0]):
-            statesL[idxl, j, :] = states[j, perm]
+            statesL[idxl, j, :] = states[j, perm].astype(np.complex64)
         t_proj += time() - z
     z = time()
     for idxr, perm in enumerate(projector.rpermutations):
         for j in range(states.shape[0]):
-            statesR[idxr, j, :] = states[j, perm].conj()
+            statesR[idxr, j, :] = states[j, perm].astype(np.complex64).conj()
     t_proj += time() - z
 
     #for proj_idx in range(projector.nterms):
@@ -653,6 +653,9 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
     MT = (flip_mask * (1 - 2 * N_ups_reals / N_samples)).mean(axis=-1) + 1.0j * (flip_mask * (1 - 2 * N_ups_imags / N_samples)).mean(axis=-1)
     print('sample estimation of MT(theta) = ', time() - t)
     print(t_proj, t_norm, t_samp)
+
+    #print(np.linalg.norm(MT.real - MT.real.conj().T))
+    #exit(-1)
     return MT
 
 
@@ -787,7 +790,7 @@ def compute_norm_qiskit_hadamardtest(circuit, projector, N_samples, noise_model)
     survivals = []
     for i in range(len(projector_circuits)):
         survivals.append(-1. + 2. * result.data(i)['counts']['0x0'] / N_samples if '0x0' in result.data(i)['counts'].keys() else -1)
-    return np.mean(survivals)
+    return np.mean(survivals * np.array(projector.characters))
 
 
 
@@ -827,7 +830,8 @@ def compute_connectivity_qiskit_hadamardtest(circuit, projector, N_samples, nois
 
     for i in range(len(projector_circuits)):
         survivals.append(-1. + 2. * result.data(i)['counts']['0x0'] / N_samples if '0x0' in result.data(i)['counts'].keys() else -1)
-    connectivities = np.array(survivals).reshape((len(circuit.params), -1)).mean(axis=-1)
+    connectivities = np.array(survivals).reshape((len(circuit.params), -1))
+    connectivities = np.einsum('ij,j->ij', connectivities, np.array(projector.characters)).mean(axis=-1)
 
     return -connectivities
 
@@ -873,8 +877,8 @@ def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, 
         for i in range(len(projector_circuits)):
             survivals.append(-1. + 2. * result.data(i)['counts']['0x0'] / N_samples if '0x0' in result.data(i)['counts'].keys() else -1)
 
-        survivals = np.array(survivals).reshape((len(hamiltonian.bonds), -1)).mean(axis = -1)
-        #return -survivals.dot(np.array(hamiltonian.js))
+        survivals = np.array(survivals).reshape((len(hamiltonian.bonds), -1))
+        survivals = np.einsum('ij,j->ij', survivals, np.array(projector.characters)).mean(axis=-1)
         der.append(survivals.dot(np.array(hamiltonian.js)))
 
     return -np.array(der)
@@ -913,7 +917,8 @@ def compute_energy_qiskit_hadamardtest(circuit, hamiltonian, projector, N_sample
     for i in range(len(projector_circuits)):
         survivals.append(-1. + 2. * result.data(i)['counts']['0x0'] / N_samples if '0x0' in result.data(i)['counts'].keys() else -1)
 
-    survivals = np.array(survivals).reshape((len(hamiltonian.bonds), -1)).mean(axis = -1)
+    survivals = np.array(survivals).reshape((len(hamiltonian.bonds), -1))
+    survivals = np.einsum('ij,j->ij', survivals, np.array(projector.characters)).mean(axis=-1)
 
     return survivals.dot(np.array(hamiltonian.js))
 
@@ -969,7 +974,7 @@ def compute_gij_qiskit_hadamardtest(circuit, projector, N_samples, noise_model, 
             for proj in range(idx_from, idx_to):
                 if j_param < i_param:
                     continue
-                gij[i_param, j_param] += survivals[ctr]
+                gij[i_param, j_param] += survivals[ctr] * projector.characters[proj]
                 ctr += 1
     gij /= len(range(idx_from, idx_to)) #[i_param, j_param] = np.mean(survivals)
 
