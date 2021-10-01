@@ -3,10 +3,10 @@ import numpy as np
 import utils
 from time import time
 import mpi4py
-#from mpi4py import MPI
-#comm = MPI.COMM_WORLD
-#rank = comm.Get_rank()
-#size = comm.Get_size()
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 
 def gradiend_descend(energy_val, init_values, args, circuit = None, \
@@ -37,7 +37,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
     #lambdas = 0.1 * np.concatenate([\
@@ -52,7 +52,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
     parameters = []
 
 
-    circuit.lamb = 1
+    circuit.lamb = 3
     max_iter = n_iter
     for n_iter in range(n_iter):
         t_iter = time()
@@ -62,6 +62,10 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
             grads_exact, ij_exact, der_one_exact = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
         else:
             grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
+
+            #print(ij)
+            #exit(-1)
+
         print('get all gradients and M_ij', time() - t)
         #print('grads_exact:', grads_exact)
         #print('grads_sampled:', grads)
@@ -100,7 +104,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
             for i in range(ij.shape[0]):
                 for j in range(ij.shape[1]):
                     if i == j:
-                        print(i, j, ij_exact[i, j], ij[i, j])
+                        print(i, j, ij_exact[i, j].real, ij[i, j].real) 
 
         #np.save('MT_exact.npy', ij_exact)
         #np.save('MT_sampl.npy', ij)
@@ -153,10 +157,15 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
         #circuit.set_parameters(cur_params)
         if config.N_samples is not None:
             MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
-            MT += config.SR_diag_reg * np.diag(np.diag(MT))
-            #assert np.allclose(MT, MT.T)
+            # MT += config.SR_diag_reg * np.diag(np.diag(MT))
+            #assert np.allclose(MT, MT.T.conj())
+            #for i in range(MT.shape[0]):
+            #    for j in range(MT.shape[1]):
+            #        print(ij[i, j], ij[j, i])
+            #exit(-1)
 
 
+            '''
             if config.reg == 'svd':
                 s, u = np.linalg.eigh(MT)
                 MT_inv = np.zeros(MT.shape)
@@ -166,17 +175,21 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
                         continue
                     MT_inv += (1. / s[lambda_idx]) * \
                             np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
-            else:
-                MT2 = MT @ MT.T.conj()
-                eigvals, eigstates = np.linalg.eigh(MT2)
-                # assert np.all(eigvals > 0)
-                MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT.shape[0]) * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)
-                MT_inv = np.linalg.inv(MT)
-                #MT_inv = np.linalg.inv(MT + config.SR_eig_cut * np.eye(MT.shape[0]))
+            else: 
+            '''
+            MT2 = MT @ MT.T.conj()
+            eigvals, eigstates = np.linalg.eigh(MT2)
+            eigvals += 1e-10
+            # assert np.all(eigvals > 0)
+            MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT.shape[0]) * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)
+            MT_inv = np.linalg.inv(MT)
+            #MT_inv = np.linalg.inv(MT + config.SR_eig_cut * np.eye(MT.shape[0]))
 
             circuit.forces = grads.copy()
             #grads = MT_inv.dot(grads - lambdas[n_iter] * der_one.real)
             grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))  # FIXME: shall we include this to the SR?
+            #print('mtinv, grads, derone, eigvals, eigvals after:', MT_inv, grads, der_one, eigvals, np.linalg.eigh(MT)[0])
+            #print('ij, derone:', ij, der_one)
             circuit.forces_SR = grads.copy()
 
         if config.test or config.N_samples is None:
@@ -184,10 +197,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
             MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
             MT2 = MT_exact @ MT_exact.T.conj()
             eigvals, eigstates = np.linalg.eigh(MT2)
-            eigvals += 1e-13
+            eigvals += 1e-10
             assert np.all(eigvals > 0)
-        
-
             MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
             MTe_inv = np.linalg.inv(MT)
 
@@ -243,6 +254,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
 
         if not config.with_mpi or (config.with_mpi and rank == 0):
             obs.write_logs()
+
+        #print(rank, new_params, 'new parameters afte update are')
         #state = circuit()
         #assert np.isclose(state.conj().dot(state), 1.0)
         #state_proj = projector(state)

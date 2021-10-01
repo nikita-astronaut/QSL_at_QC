@@ -10,11 +10,11 @@ from time import time
 #import qiskit
 
 
-#import mpi4py
-#from mpi4py import MPI
-#comm = MPI.COMM_WORLD
-#rank = comm.Get_rank()
-#size = comm.Get_size()
+import mpi4py
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 
 sz = np.array([[1, 0], \
@@ -263,13 +263,19 @@ class SU2_symmetrized(Circuit):
 
         ### defining operator locs ###
         self.layers, self.pairs = self._get_dimerizarion_layers()
-        self.params = self._initialize_parameters()
 
-        if self.config.with_mpi and rank == 0:
+
+        if not self.config.with_mpi or (self.config.with_mpi and rank == 0):
+            self.params = self._initialize_parameters()
+        else:
+            self.params = np.zeros(len(self.layers), dtype=np.float64)
+
+        if self.config.with_mpi:# and rank == 0:
             comm.Bcast([self.params, MPI.DOUBLE], root = 0)
             comm.Barrier()
-            print('process', rank, 'parameters', self.params)
+        print('process', rank, 'parameters', self.params, len(self.layers), flush=True)
 
+        
         ### defining of unitaries ###
         self._refresh_unitaries_derivatives()
 
@@ -372,22 +378,65 @@ class SU2_symmetrized(Circuit):
             self.energy = energy_sampling / norm_sampling
 
             if self.config.qiskit:
-                energy_qiskit_ht = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+                ### computation of <E> ###
+                if not self.config.with_mpi:
+                    energy_qiskit_ht = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+                else:
+                    energy_qiskit_ht_part = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model) 
 
-                print(energy_sampling, energy_qiskit_ht, 'energies')
+                    energy_qiskit_ht = np.array([0.0 + 0.0j])
+                    energy_qiskit_ht_part = np.array([energy_qiskit_ht_part])
+                    print('process', rank, 'energy part before ', energy_qiskit_ht_part)
+                    comm.Allreduce(energy_qiskit_ht_part, energy_qiskit_ht, op=MPI.SUM)
+                    comm.Barrier()
+                    print('process', rank, 'energy total after', energy_qiskit_ht)
+                    energy_qiskit_ht /= size
+                    energy_qiskit_ht = energy_qiskit_ht[0]
+                print(energy_qiskit_ht, energy_sampling, 'comparison qiskit | samplint of energy')
 
-                norm_qiskit_ht = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
-                print(derivatives_sampling, 'der sampling')
-                # exit(-1)
-                derivatives_qiskit_ht = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
+
+                ### computation of <N> ###
+                if not self.config.with_mpi:
+                    norm_qiskit_ht = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
+                else:
+                    norm_qiskit_ht_part = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
+
+                    norm_qiskit_ht = np.array([0.0 + 0.0j])
+                    norm_qiskit_ht_part = np.array([norm_qiskit_ht_part])
+                    print('process', rank, 'norm part before ', norm_qiskit_ht_part)
+                    comm.Allreduce(norm_qiskit_ht_part, norm_qiskit_ht, op=MPI.SUM)
+                    comm.Barrier()
+                    print('process', rank, 'norm total after', norm_qiskit_ht)
+                    norm_qiskit_ht /= size
+
+                    norm_qiskit_ht = norm_qiskit_ht[0]
+
+                print(norm_qiskit_ht, norm_sampling, 'comparison qiskit | samplint of norm')
                 
-                print(derivatives_qiskit_ht, 'der netket')
+
+
+                ### computation of grad<E> ###                
+                if not self.config.with_mpi:
+                    derivatives_qiskit_ht = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model, 0, len(projector.cycl))
+                else:
+                    derivatives_qiskit_ht_part = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model, rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size)
+
+                    derivatives_qiskit_ht = derivatives_qiskit_ht_part * 0. + 0.0j
+
+                    print('process', rank, 'gradient part before ', derivatives_qiskit_ht_part)
+                    comm.Allreduce(derivatives_qiskit_ht_part, derivatives_qiskit_ht, op=MPI.SUM)
+                    comm.Barrier()
+                    print('process', rank, 'gradient total after', derivatives_qiskit_ht)
+                    derivatives_qiskit_ht /= size
+
+                print(derivatives_sampling)
+                print(derivatives_qiskit_ht)
+                print('comparison qiskit | samplint of grad')
 
                 grad_sampling = (derivatives_qiskit_ht / norm_qiskit_ht - self.connectivity_sampling * energy_qiskit_ht / norm_qiskit_ht).real * 2
                 self.energy = energy_qiskit_ht / norm_qiskit_ht
 
                 print(norm_qiskit_ht, 'norm quskit ht')
-
 
 
         elif method == 'SPSA':
@@ -995,22 +1044,52 @@ class SU2_symmetrized(Circuit):
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, noise_p = self.config.noise_p)
 
         if self.config.qiskit:
-            connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real') + \
-                              1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag')
-            gij = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real') - \
-                1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag')
+            ### computation of <A_i> ###
+            if not self.config.with_mpi:
+                connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', 0, len(projector.cycl)) + \
+                                  1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', 0, len(projector.cycl))
 
-        #print(connectivity)
-        #print(connectivity_qiskit_ht)
+            else:
+                connectivity_qiskit_ht = utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size) + \
+                                       1.0j * utils.compute_connectivity_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size)
+
+                connectivity_qiskit_ht_part = connectivity_qiskit_ht.copy()# * 0. + 0.0j
+               
+                print('process', rank, 'connectivity part before ', connectivity_qiskit_ht_part, len(projector.cycl), size, flush=True)
+                print(connectivity_qiskit_ht_part.shape, connectivity_qiskit_ht.shape, connectivity_qiskit_ht_part.dtype, connectivity_qiskit_ht.dtype, flush=True)
+                comm.Allreduce(connectivity_qiskit_ht_part, connectivity_qiskit_ht, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'connectivity total after', connectivity_qiskit_ht, flush=True)
+                connectivity_qiskit_ht /= size
+
+
+            ### computation of G_ij ###
+            if not self.config.with_mpi:
+                gij = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', 0, len(projector.cycl)) - \
+                    1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', 0, len(projector.cycl))
+            else:
+                gij_part = utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'real', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size) - \
+                    1.0j * utils.compute_gij_qiskit_hadamardtest(self, projector, N_samples, self.config.noise_model, 'imag', rank * len(projector.cycl) // size, (rank + 1) * len(projector.cycl) // size)
+
+                gij = gij_part * 0.
+
+                print('process', rank, 'gij part before ', gij_part)
+                comm.Allreduce(gij_part, gij, op=MPI.SUM)
+                comm.Barrier()
+                print('process', rank, 'gij total after', gij)
+                gij /= size
+
+        if self.config.qiskit:
+            print(connectivity)
+            print(connectivity_qiskit_ht)
+            print('comparison connectivity sampling | qiskit')
 
         
 
-
-        #for i in range(gij.shape[0]):
-        #    for j in range(gij.shape[1]):
-        #        print(i, j, gij[i, j], metric_tensor[i, j])
-        #print(gij)
-        #print(metric_tensor)
+            print('comparison gij sampling | qiskit')
+            for i in range(gij.shape[0]):
+                for j in range(gij.shape[1]):
+                    print(i, j, gij[i, j], metric_tensor[i, j])
 
 
         if self.config.qiskit:
@@ -1157,7 +1236,7 @@ class SU2_symmetrized(Circuit):
         P_ijun = (SSun + np.eye(4)) / 2.
         pairs = []
 
-        for n_layers in range(1):
+        for n_layers in range(3):
             for shid, shift in enumerate([(0, 0), (1, 1), (1, 0), (0, 1)]):
                 for pair in [(0, 4), (1, 5), (2, 6), (3, 7), (8, 12), (9, 13), (10, 14), (11, 15)] if shid < 2 else [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 13), (14, 15)]:
                 #for pair in [(0, 4), (1, 5), (2, 6), (3, 7)] if shid < 2 else [(0, 1), (2, 3), (4, 5), (6, 7)]:
@@ -1233,6 +1312,7 @@ class SU2_symmetrized(Circuit):
         self.unitaries_herm = []
         self.derivatives = []
 
+        print(self.params)
         for i in range(len(self.params)):
             unitaries_layer = []
             unitaries_herm_layer = []
@@ -1774,3 +1854,406 @@ class SU2_symmetrized_square_6x4(SU2_symmetrized):
                 pairs.append((i, j))
 
         return layers, pairs
+
+
+class SU2_symmetrized_square_2x3_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3)], \
+                  [(2, 5), (3, 4)], \
+                  [(0, 3), (1, 2)], \
+                  [(2, 4), (3, 5)], \
+                  [(0, 1), (2, 3), (4, 5)], \
+                  [(0, 2), (1, 3)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
+class SU2_symmetrized_square_2x4_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                  [(2, 5), (3, 4)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(2, 4), (3, 5)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
+class SU2_symmetrized_square_2x5_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                  [(2, 5), (3, 4), (6, 9), (7, 8)], \
+                  [(2, 4), (3, 5), (6, 8), (7, 9)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)], \
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
+
+
+class SU2_symmetrized_square_2xL_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+
+
+        patterns = []
+        
+        ### pattern NN vertical even ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, y + 1
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        ### pattern NNN odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x + 1, y + 1
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x - 1, y + 1
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+                
+ 
+        ### pattern NN vertical odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, y + 1
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        ### pattern NNN odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x + 1, y + 1
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x - 1, y + 1
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+        ### pattern NN horizontal ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x + 1, y
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+        
+        patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns
+        patterns = patterns[:2 * self.Ly]
+        print('patterns:', patterns)
+        for l in range(1):
+            for pattern in patterns:
+                for pair in pattern:
+                    i, j = pair
+                    layer = [((i, j), P_ij)]
+                    layers.append(deepcopy(layer))
+
+        return layers, pair
+
+
+class SU2_symmetrized_square_2xL_OBC_PBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+
+
+        patterns = []
+
+        ### pattern NN vertical even ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        ### pattern NNN odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x + 1, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x - 1, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        ### pattern NN vertical odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        ### pattern NNN odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x + 1, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x - 1, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        ### pattern NN horizontal ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x + 1, y
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and yto in range(self.Ly):
+                pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+        patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns
+        patterns = patterns[:2 * self.Ly]
+        print('patterns:', patterns)
+        for l in range(1):
+            for pattern in patterns:
+                for pair in pattern:
+                    i, j = pair
+                    layer = [((i, j), P_ij)]
+                    layers.append(deepcopy(layer))
+
+        return layers, pair
+
+
+
+
+
+class SU2_symmetrized_square_2x5_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                  [(2, 5), (3, 4), (6, 9), (7, 8)], \
+                  [(2, 4), (3, 5), (6, 8), (7, 9)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)], \
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
+
+
+class SU2_symmetrized_square_1xL(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+
+
+        patterns = []
+
+        ### pattern NN vertical odd ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and (yto in range(self.Ly) or self.BC == 'PBC'):
+                if y % 2 == 1:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+        ### pattern NN vertical even ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, (y + 1) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and (yto in range(self.Ly) or self.BC == 'PBC'):
+                if y % 2 == 0:
+                    pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
+
+
+
+        patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns
+        patterns = patterns[:2 * self.Ly]
+        print('patterns:', patterns)
+        for l in range(1):
+            for pattern in patterns:
+                for pair in pattern:
+                    i, j = pair
+                    layer = [((i, j), P_ij)]
+                    layers.append(deepcopy(layer))
+        return layers, pair
+

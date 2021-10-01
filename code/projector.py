@@ -139,7 +139,6 @@ class ProjectorFull(Projector):
                     if np.allclose(p, np.argsort(l)[r]) and not found:
                         self.left_right_decompositions.append((idxl, idxr))
                         found = True
-
         print(self.left_right_decompositions)
         assert len(self.left_right_decompositions) == len(maps)
 
