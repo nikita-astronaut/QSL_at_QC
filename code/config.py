@@ -23,10 +23,12 @@ class opt_parameters:
         j2 = float(sys.argv[2])
         n_trial = int(sys.argv[3])
         ### preparing the logging ###
-        self.path_to_logs = '/home/cluster/niastr/data/QSL_at_QC//logs/megatests_sampling_symm_20_2l/{:.3f}_{:d}_{:d}/'.format(j2, int(sys.argv[3]), int(sys.argv[4]))
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC//logs/test_2x3/{:.3f}_{:d}_{:d}/'.format(j2, int(sys.argv[3]), int(sys.argv[4]))
         os.makedirs(self.path_to_logs, exist_ok=True)
-        self.mode = 'continue'#preassigned'
-        #self.start_params = np.array([-0.3685, 0.4482, -0.0392, 0.2020, 0.0176, 0.0232, 0.2243, -0.1977, -0.0397, 0.1452, 0.0977, 0.1164, -0.0738, -0.0676, 0.2746, -0.2067, -0.0607, 0.1969, -0.1255, -0.0639, 0.0043, 0.1844, 0.1209, -0.2012, -0.7399, 0.0994, -0.0190, -0.0755, 0.0712, 0.0217, 0.0836, 0.0750, 0.5846, 0.0583, -0.0376, 0.8201, 0.3595, 0.2171, 0.1347, 0.4565, 0.2980, 0.1066, 0.1914, -0.2382, 0.0938, 0.0925, 0.0987, 0.0874, 0.3376, 0.2784, 0.5012, 0.4006, 0.5574, 0.3548, 0.2837, 0.3671, -0.4296, 0.0146, 0.0455, 0.0115, -0.0268, -0.0026, 0.0025, -0.0297,])
+        self.mode = 'continue'
+        self.start_params = np.array([-0.0865, -0.1249, 0.2242, 0.5396, -0.0133, 0.3927, 0.2661, 0.5038, -0.4066, -0.0471, 0.2810, 0.3787, -0.1155,])
+        #self.start_params = np.array([-0.0082, -0.0611, -0.1012, -0.1739, -0.4332, -0.1994, -0.6917, -0.1064, -0.1558, 0.4839, -0.3445, -0.2647, 0.3493, 0.0373, -0.1006, -0.7742, 0.0219, -0.5004, 0.1701, -0.1798,])
+        #self.start_params = np.array([-13.1161, -13.1978, 20.4580, 20.5174, 5.4061, 15.8236, -23.1007, 13.3516, 20.5787, -65.9202, 19.6224, -22.5249, 13.6768, -31.9001, 19.9774, -0.1225, 10.9714, -20.8571, 51.4837, -28.2605, -18.0414, 45.4674, 5.9149, -21.7624, -7.7010,])
         
         self.target_norm = 0.25 #0.5#0.5 #0.20#0.10#0.20 #0.80
         self.lagrange = False#True #True #False#True# True
@@ -36,20 +38,20 @@ class opt_parameters:
         self.reg = 'diag'
 
         ### setting up geometry and parameters ###
-        self.Lx, self.Ly, self.subl = 2, 4, 1
+        self.Lx, self.Ly, self.subl = 2, 3, 1
         self.su2 = True#False#True
-        self.BC = 'PBC'
+        self.BC = 'OBC'
         self.spin = 0
         self.noise = False; assert not (self.noise and self.su2)
         self.noise_p = 0.#1e-2#3e-3 #3e-3#3e-3
 
 
-        self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=self.Lx * self.Ly // 2 + self.spin if self.su2 else None)
+        self.basis = ls.SpinBasis(ls.Group([]), number_spins=self.Lx * self.Ly, hamming_weight=(self.Lx * self.Ly) // 2 + self.spin if self.su2 else None)
         self.basis.build()
         
         ### setting up symmetries ###
         self.symmetries = [
-            utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
@@ -57,9 +59,9 @@ class opt_parameters:
             #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
         ]
-        self.eigenvalues = []#1, 1, 1]#, 1]#1, -1, 1]#, 1]
-        self.sectors = []#0, 0, 0]#, 0]#[0, 2, 0]#, 0]  # in Toms notation
-        self.degrees = []#2, 4, 2]#[4, 4, 2]#, 2]
+        self.eigenvalues = [-1, 1]#1, 1, 1]#, 1]#1, -1, 1]#, 1]
+        self.sectors = [1, 0]#0, 0, 0]#, 0]#[0, 2, 0]#, 0]  # in Toms notation
+        self.degrees = [2, 2]#2, 4, 2]#[4, 4, 2]#, 2]
 
         self.unitary_no = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
         self.unitary_neel = np.ones((self.Lx * self.Ly, self.Lx * self.Ly))
@@ -101,8 +103,8 @@ class opt_parameters:
 
         #self.dimerization = [(0, 6), (1, 5), (2, 8), (3, 7), (4, 9), (14, 19), (10, 16), (11, 15), (12, 18), (13, 17)]
         #self.dimerization = [(0, 3), (1, 4), (2, 5), (6, 9), (7, 10), (8, 11)]
-        self.dimerization = [(0, 1), (2, 3), (4, 5), (6, 7)]
-        self.circuit = circuits.SU2_symmetrized_square_2x4#_OBCPBC
+        self.dimerization = [(0, 1), (2, 3), (4, 5)]#, (6, 7)]#, (8, 9)]
+        self.circuit = circuits.SU2_symmetrized_square_2x3_OBC #PBC
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'subl' : self.subl, \
@@ -124,7 +126,7 @@ class opt_parameters:
 
         self.observables = [observables.neel_order(self.Lx, self.Ly, self.basis, self.su2), \
                             observables.stripe_order(self.Lx, self.Ly, self.basis, self.su2), \
-                            observables.dimer_order(self.Lx, self.Ly, self.basis, self.su2, self.BC) \
+                            #observables.dimer_order(self.Lx, self.Ly, self.basis, self.su2, self.BC) \
                            ]
 
 
@@ -139,7 +141,7 @@ class opt_parameters:
 
         #### stochastic parameters ####
         self.N_samples = 2 ** int(sys.argv[4]) #int(sys.argv[3])#2 ** int(sys.argv[3])
-        self.SR_eig_cut = 3e-2
+        self.SR_eig_cut = 1e-1
         self.SR_diag_reg = 0.
         self.SR_scheduler = True
 
@@ -149,7 +151,7 @@ class opt_parameters:
 
 
         #### noise parameters ####
-        self.qiskit = True #True # True
+        self.qiskit = False #True # True
         if self.qiskit:
             import qiskit.providers.aer.noise as noise
             self.prob_1 = float(sys.argv[5]) / 10. #1e-4#1e-9

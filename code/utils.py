@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from time import time
 import lattice_symmetries as ls
-import qiskit
+#import qiskit
 import scipy
 import scipy.linalg
 from numba import jit
@@ -215,6 +215,7 @@ def get_Cy_symmetry_map(Lx, Ly, basis, su2=False):
     rep, _, _ = basis.batched_state_info(idxs_mapped2)
     rep = rep[:, 0]
     assert len(np.unique(rep)) == len(rep)
+    print('Cy', map_site)
     return map_site, np.argsort(rep)
 
 
@@ -481,6 +482,7 @@ def compute_energy_sample(state, hamiltonian, projector, N_samples, noise_p = 0.
     ps = (0.5 - np.dot(state0_proj_inv, states_ham.T) / 2.).real
     flip_mask = np.ones(shape=(projector.nterms, len(js))) if noise_p == 0. else 1. - 2 * (np.random.uniform(0, 1, size=(projector.nterms, len(js))) < noise_p)
 
+    ps = np.clip(ps, a_min=0., a_max=1.)
     N_ups = np.random.binomial(N_samples, ps)
     energy = np.sum((flip_mask * (1 - 2 * N_ups / N_samples)).dot(js))
     print('sample estimation of E(theta) = ', time() - t)
@@ -849,11 +851,12 @@ def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, 
             circ_ham = circ.copy()
             circ_ham = circuit.act_permutation_qiskit(circ_ham, [hamiltonian.bonds[j_param]], ancilla=True, ancilla_qubit_idx = circuit.n_qubits)
 
-            
+            #print(hamiltonian.bonds[j_param])            
             for idx, cycl in enumerate(projector.cycl):
                 current_circ = circ_ham.copy('circuit_projector_{:d}_{:d}'.format(j_param, idx))
 
                 pair_permutations = projector.all_pair_permutations[idx]
+                #print(pair_permutations)
                 current_circ = circuit.act_permutation_qiskit(current_circ, pair_permutations, ancilla=True, ancilla_qubit_idx = circuit.n_qubits)
                 current_circ.h(circuit.n_qubits)
 
@@ -871,6 +874,7 @@ def compute_der_qiskit_hadamardtest(circuit, hamiltonian, projector, N_samples, 
         survivals = np.array(survivals).reshape((len(hamiltonian.bonds), -1)).mean(axis = -1)
         #return -survivals.dot(np.array(hamiltonian.js))
         der.append(survivals.dot(np.array(hamiltonian.js)))
+        print(der)
 
     return -np.array(der)
 

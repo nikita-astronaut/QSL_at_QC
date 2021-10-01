@@ -7,7 +7,7 @@ import lattice_symmetries as ls
 import scipy
 import utils
 from time import time
-import qiskit
+#import qiskit
 
 
 #import mpi4py
@@ -374,16 +374,19 @@ class SU2_symmetrized(Circuit):
             if self.config.qiskit:
                 energy_qiskit_ht = utils.compute_energy_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
 
-                print(energy_sampling, energy_qiskit_ht)
+                print(energy_sampling, energy_qiskit_ht, 'energies')
 
                 norm_qiskit_ht = utils.compute_norm_qiskit_hadamardtest(self, projector, self.config.N_samples, self.config.noise_model)
+                print(derivatives_sampling, 'der sampling')
+                # exit(-1)
                 derivatives_qiskit_ht = utils.compute_der_qiskit_hadamardtest(self, hamiltonian, projector, self.config.N_samples, self.config.noise_model)
                 
-                print(derivatives_sampling)
-                print(derivatives_qiskit_ht)
+                print(derivatives_qiskit_ht, 'der netket')
 
                 grad_sampling = (derivatives_qiskit_ht / norm_qiskit_ht - self.connectivity_sampling * energy_qiskit_ht / norm_qiskit_ht).real * 2
                 self.energy = energy_qiskit_ht / norm_qiskit_ht
+
+                print(norm_qiskit_ht, 'norm quskit ht')
 
 
 
@@ -1021,6 +1024,29 @@ class SU2_symmetrized(Circuit):
 
         state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
         state[0] = 1.
+
+
+        '''
+        ####### BEGIT TESTING ########
+        ### perform the unitary transform to mzmz basis ###
+        for site in range(self.n_qubits):
+            op = ls.Operator(self.basis_bare, [ls.Interaction(sx, [(site,)])])
+
+            x, y = site % self.Lx, site // self.Lx
+            if (x + y) % 2 == 0:
+                state = op(state)
+
+        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
+        for i in range(self.basis.number_states):
+            x = self.basis.states[i]
+            _, _, norm = self.basis.state_info(x)
+            state_su2[i] = state[self.basis_bare.index(x)] / norm
+
+        return state_su2
+
+
+        ### END TESTING #######
+        ''' 
        
         if self.spin == 0:
             for pair in self.dimerization:
@@ -1199,7 +1225,7 @@ class SU2_symmetrized(Circuit):
             #exit(-1)
             return eval(arr)
         except:
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.001 # + np.pi / 4.
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01 # + np.pi / 4.
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -1597,11 +1623,11 @@ class SU2_symmetrized_square_2x4(SU2_symmetrized):
 
         for l in range(1):
             for pattern in [
-                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
-                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
-                  [(2, 5), (3, 4), (6, 1), (7, 0)], \
                   [(0, 2), (1, 3), (4, 6), (5, 7)], \
-                  [(2, 4), (3, 5), (6, 0), (1, 7)]
+                  [(2, 5), (3, 4), (6, 1), (7, 0)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(2, 4), (3, 5), (6, 0), (1, 7)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
                 ]:
                 for pair in pattern:
                     i, j = pair
@@ -1611,6 +1637,109 @@ class SU2_symmetrized_square_2x4(SU2_symmetrized):
                     pairs.append((i, j))
 
         return layers, pair
+
+
+
+class SU2_symmetrized_square_2x5_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                  [(2, 5), (3, 4), (6, 9), (7, 8)], \
+                  [(2, 4), (3, 5), (6, 8), (7, 9)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)], \
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
+
+
+
+
+class SU2_symmetrized_square_2x4_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                  [(2, 5), (3, 4)], \
+                  [(0, 3), (1, 2), (4, 7), (5, 6)], \
+                  [(2, 4), (3, 5)], \
+                  [(0, 1), (2, 3), (4, 5), (6, 7)], \
+                  [(0, 2), (1, 3), (4, 6), (5, 7)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
+
+
+
+class SU2_symmetrized_square_2x3_OBC(SU2_symmetrized):
+    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
+        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
+        self.n_qubits = Lx * Ly
+
+        return
+
+    def _get_dimerizarion_layers(self):
+        layers = []
+        P_ij = (SS + np.eye(4)) / 2.
+        P_ijun = (SSun + np.eye(4)) / 2.
+        pairs = []
+
+        for l in range(1):
+            for pattern in [
+                  [(0, 2), (1, 3)], \
+                  [(2, 5), (3, 4)], \
+                  [(0, 3), (1, 2)], \
+                  [(2, 4), (3, 5)], \
+                  [(0, 1), (2, 3), (4, 5)], \
+                  [(0, 2), (1, 3)], \
+                ]:
+                for pair in pattern:
+                    i, j = pair
+
+                    layer = [((i, j), P_ij if self.unitary[i, j] == +1 else P_ijun)]
+                    layers.append(deepcopy(layer))
+                    pairs.append((i, j))
+
+        return layers, pair
+
 
 
 

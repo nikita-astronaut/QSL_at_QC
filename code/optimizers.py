@@ -184,8 +184,10 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 4000, lr = 0.003, 
             MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
             MT2 = MT_exact @ MT_exact.T.conj()
             eigvals, eigstates = np.linalg.eigh(MT2)
-            eigvals += 1e-14
-            #assert np.all(eigvals > 0)
+            eigvals += 1e-13
+            assert np.all(eigvals > 0)
+        
+
             MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
             MTe_inv = np.linalg.inv(MT)
 

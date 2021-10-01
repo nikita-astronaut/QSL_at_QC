@@ -42,7 +42,7 @@ class Hamiltonian(object):
    
         ### obtaining ground state in the correct symmetry sector ###
         self.basis = ls.SpinBasis(ls.Group([ls.Symmetry(s, sector=sec) for s, sec in zip(self.symmetries, self.sectors)]), \
-                                            number_spins=n_qubits, hamming_weight=n_qubits // 2 + self.spin if su2 else None, spin_inversion=+1)
+                                            number_spins=n_qubits, hamming_weight=n_qubits // 2 + self.spin if su2 else None)#, spin_inversion=-1)
         self.basis.build()
         
 
@@ -55,13 +55,13 @@ class Hamiltonian(object):
             energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.complex128)
             np.save(os.path.join(workdir, 'energy.npy'), energy)
             np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
-        print(repr(energy - self.energy_renorm))
+        print(repr(energy - self.energy_renorm), 'energies')
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
         #    for s in self.permutations:
         #        print(np.dot(state.conj(), state[s]))
         ## DEBUG
-        
+        ''' 
         spins = []
         all_bonds = []
         for i in range(self.n_qubits):
@@ -70,7 +70,7 @@ class Hamiltonian(object):
                     all_bonds.append((i, j))
         total_spin = ls.Operator(self.basis, [ls.Interaction(SS, all_bonds)])        
         for s in ground_state.T:
-            print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
+            print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits, n_qubits)
             spins.append(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
         #exit(-1)
         ### END DEBUG
@@ -78,7 +78,8 @@ class Hamiltonian(object):
             if np.isclose(s / 4, self.spin * (self.spin + 1)):
                 break
         print('idx = ', idx)
-
+        '''
+        idx = 0
         ### rewrite ground state in terms of non-symmetrized basis ###
         gs_nonsymm = np.zeros(basis.number_states, dtype=np.complex128)
         gs_symm = ground_state[:, idx]  # FIXME
@@ -107,7 +108,6 @@ class Hamiltonian(object):
         #print(energy[1] - self.energy_renorm)
         #exit(-1)
         self.gse = energy[0]
-        #exit(-1)
         return
 
     def __call__(self, bra, n_term = None, vector=True):
