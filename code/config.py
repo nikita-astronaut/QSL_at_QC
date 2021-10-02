@@ -24,7 +24,7 @@ class opt_parameters:
         n_trial = int(sys.argv[3])
         ### preparing the logging ###
         #self.path_to_logs = '/home/cluster/niastr/data/QSL_at_QC//logs/qiskit_2x{:d}_experiments/{:.3f}_{:d}_{:d}_{:.5f}/'.format(j2, int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5]))
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/TFIM_{:d}_/{:.3f}_{:d}_{:d}/'.format(int(sys.argv[5]), j2, int(sys.argv[3]), int(sys.argv[4]))
+        self.path_to_logs = '/home/cluster/niastr/data/logs_SR2e-1/TFIM_{:d}/{:.3f}_{:d}_{:d}/'.format(int(sys.argv[5]), j2, int(sys.argv[3]), int(sys.argv[4]))
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
         
@@ -136,7 +136,7 @@ class opt_parameters:
 
         #### stochastic parameters ####
         self.N_samples = 2 ** int(sys.argv[4]) #int(sys.argv[3])#2 ** int(sys.argv[3])
-        self.SR_eig_cut = 1e-1
+        self.SR_eig_cut = 2e-1
         self.SR_diag_reg = 0.
         self.SR_scheduler = False#True
 
