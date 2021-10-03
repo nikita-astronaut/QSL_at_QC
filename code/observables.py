@@ -152,7 +152,7 @@ class Observables(object):
         return
 
     def write_logs(self):
-        print('smth entered', flush=True)
+        #print('smth entered', flush=True)
         if self.config.test or self.config.N_samples is None:
             force_exact = self.circuit.forces_exact
             for f in force_exact:
@@ -199,7 +199,7 @@ class Observables(object):
         norm = np.vdot(state, state_proj)
         energy = (np.vdot(state, self.hamiltonian(state_proj)) / norm).real - self.hamiltonian.energy_renorm
         #print(np.vdot(state, self.hamiltonian(state_proj)) / norm)
-        print(norm, 'norm full')
+        #print(norm, 'norm full')
         #print(np.vdot(self.projector(self.hamiltonian(state)), self.hamiltonian(self.projector(state))) / np.vdot(self.projector(self.hamiltonian(state)), self.projector(self.hamiltonian(state))))
 
         ### compute fidelity ###
