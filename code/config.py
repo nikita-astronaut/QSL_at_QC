@@ -29,7 +29,7 @@ class opt_parameters:
         self.mode = 'continue'
         
         self.target_norm = 0.98
-        self.lagrange = False
+        self.lagrange = True if int(sys.argv[6]) == 1 else False
         self.Z = 300.
 
         self.test = False
@@ -129,7 +129,7 @@ class opt_parameters:
         self.algorithm = optimizers.natural_gradiend_descend #SPSA_gradiend_descend#Lanczos_energy_extrapolation #natural_gradiend_descend#SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
         self.write_logs = True
 
-        self.opt_params_dict = {'lr' : 1e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.opt_params_dict = {'lr' : 3e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
         self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = None; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 

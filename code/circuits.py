@@ -63,13 +63,13 @@ class Circuit(object):
     def get_natural_gradients(self, hamiltonian, projector, N_samples=None, method='standard'):
         t = time()
         ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, N_samples, method)
-        print('metric tensor: ', time() - t)
+        #print('metric tensor: ', time() - t)
         self.connectivity_sampling = j_sampling
         self.connectivity_exact = j
 
         t = time()
         grads, grads_sampling = self.get_all_derivatives(hamiltonian, projector, N_samples, method)
-        print('energy derivatives: ', time() - t)
+        #print('energy derivatives: ', time() - t)
 
         if N_samples is None:
             return grads, ij, j
@@ -1038,7 +1038,7 @@ class SU2_symmetrized(Circuit):
             self.der_states = self.unitaries[i][0](self.der_states)
             self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
         
-        print('obtain states for MT ', time() - t)
+        #print('obtain states for MT ', time() - t)
 
         metric_tensor = utils.compute_metric_tensor_sample(np.array(self.der_states).T, projector, N_samples, self.config.noise_p)
         connectivity = utils.compute_connectivity_sample(self.__call__(), self.der_states.T, projector, N_samples, noise_p = self.config.noise_p)
@@ -1278,9 +1278,11 @@ class SU2_symmetrized(Circuit):
 
     def _initialize_parameters(self):
         if self.config.mode == 'fresh':
+            self.lamb = 1.0
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.0 + np.pi / 4. * 0.
 
         if self.config.mode == 'preassigned':
+            self.lamb = 1.0
             return self.config.start_params
 
         try:
@@ -1304,6 +1306,7 @@ class SU2_symmetrized(Circuit):
             #exit(-1)
             return eval(arr)
         except:
+            self.lamb = 1.0
             return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01 # + np.pi / 4.
 
 

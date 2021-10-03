@@ -52,7 +52,6 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
     parameters = []
 
 
-    circuit.lamb = 3
     max_iter = n_iter
     for n_iter in range(n_iter):
         t_iter = time()
@@ -66,7 +65,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
             #print(ij)
             #exit(-1)
 
-        print('get all gradients and M_ij', time() - t)
+        #print('get all gradients and M_ij', time() - t)
         #print('grads_exact:', grads_exact)
         #print('grads_sampled:', grads)
 
@@ -87,14 +86,17 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
             print('grads')
             for conexact, consampl in zip(grads_exact, grads):
                 print(conexact, consampl, np.abs(conexact - consampl))
+                assert np.abs(conexact - consampl) < 1e-3
 
             print('connectivities')
             for conexact, consampl in zip(der_one_exact, der_one):
                 print(conexact, consampl, np.abs(conexact - consampl))
+                assert np.abs(conexact - consampl) < 1e-3
             print('MTij')
             for i in range(ij.shape[0]):
                 for j in range(ij.shape[0]):
-                    print(ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j], ij[i, j] - np.conj(der_one)[i] * der_one[j], np.abs(ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j] - (ij[i, j] - np.conj(der_one)[i] * der_one[j])), i, j)
+                    print((ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j]).real, (ij[i, j] - np.conj(der_one)[i] * der_one[j]).real, np.abs((ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j]).real - (ij[i, j] - np.conj(der_one)[i] * der_one[j]).real), i, j)
+                    assert np.abs((ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j]).real - (ij[i, j] - np.conj(der_one)[i] * der_one[j]).real) < 1e-3
             print(np.linalg.eigh(ij_exact - np.outer(np.conj(der_one_exact), der_one_exact))[0])
             print(np.linalg.eigh(ij - np.outer(np.conj(der_one), der_one))[0])
         #np.save('grads_exact.npy', grads_exact)
@@ -263,8 +265,8 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
 
         #print('iteration: {:d}, energy = {:.7f}, fidelity = {:.7f}'.format(n_iter, _circuit_energy(new_params, *args) - hamiltonian.energy_renorm, \
         #                np.abs(np.dot(hamiltonian.ground_state[0].conj(), state_proj)) ** 2))
-        print('iteration took', time() - t_iter)
-        print('lambda = {:.3f}'.format(circuit.lamb))
+        #print('iteration took', time() - t_iter)
+        #print('lambda = {:.3f}'.format(circuit.lamb))
     return circuit
 
 
@@ -298,7 +300,7 @@ def SPSA_gradiend_descend(obs, init_values, args, n_iter = 40000, lr = 0.003, te
         t = time()
         
         grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples, 'SPSA_realgrad')
-        print('get all gradients and M_ij', time() - t)
+        #print('get all gradients and M_ij', time() - t)
 
 
         

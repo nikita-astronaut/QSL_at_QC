@@ -369,7 +369,7 @@ def compute_norm_sample(state, projector, N_samples, noise_p = 0.):
     ps = [(0.5 - np.vdot(projector(state, proj_idx), state) / 2.).real for proj_idx in range(projector.nterms)]
     ps = np.clip(ps, a_min=0., a_max=1.)
     N_ups = np.random.binomial(N_samples, ps)
-    print('sample estimation of N(theta) = ', time() - t)
+    #print('sample estimation of N(theta) = ', time() - t)
 
     flip_mask = np.ones(projector.nterms) if noise_p == 0. else 1. - 2 * (np.random.uniform(0, 1, size=projector.nterms) < noise_p)
 
@@ -485,7 +485,7 @@ def compute_energy_sample(state, hamiltonian, projector, N_samples, noise_p = 0.
     ps = np.clip(ps, a_min=0., a_max=1.)
     N_ups = np.random.binomial(N_samples, ps)
     energy = np.sum((flip_mask * (1 - 2 * N_ups / N_samples)).dot(js))
-    print('sample estimation of E(theta) = ', time() - t)
+    #print('sample estimation of E(theta) = ', time() - t)
     return energy / projector.nterms
 
 
@@ -552,7 +552,7 @@ def get_hamiltonian_power_expectation_sampling(H_power, circuit, hamiltonian, pr
         return H_power_total
 
     for perm_combination in itertools.product(*([np.arange(len(hamiltonian.bonds))] * (H_power - n_stored_powers))):
-        print(perm_combination)
+        #print(perm_combination)
         states_act = np.array(stored_wfs).copy() * 1.0
         js_act = np.array(stored_js).copy() * 1.0
 
@@ -651,10 +651,10 @@ def compute_metric_tensor_sample(states, projector, N_samples, noise_p = 0.):
 
     flip_mask = np.ones(shape=(states.shape[0], states.shape[0], projector.nterms)) if noise_p == 0. else 1. - 2 * (np.random.uniform(0, 1, size=(states.shape[0], states.shape[0], projector.nterms)) < noise_p)
 
-    print('flip mask mean for connectivity: ', np.mean(flip_mask), noise_p)
+    #print('flip mask mean for connectivity: ', np.mean(flip_mask), noise_p)
     MT = (flip_mask * (1 - 2 * N_ups_reals / N_samples)).mean(axis=-1) + 1.0j * (flip_mask * (1 - 2 * N_ups_imags / N_samples)).mean(axis=-1)
-    print('sample estimation of MT(theta) = ', time() - t)
-    print(t_proj, t_norm, t_samp)
+    #print('sample estimation of MT(theta) = ', time() - t)
+    #print(t_proj, t_norm, t_samp)
 
     #print(np.linalg.norm(MT.real - MT.real.conj().T))
     #exit(-1)
@@ -671,7 +671,7 @@ def compute_connectivity_sample(state0, states, projector, N_samples, noise_p = 
     flip_mask = np.ones(shape=(projector.nterms, states.shape[0])) if noise_p == 0. else 1. - 2 * (np.random.uniform(0, 1, size=(projector.nterms, states.shape[0])) < noise_p)
 
 
-    print('flip mask mean for connectivity: ', np.mean(flip_mask))
+    #print('flip mask mean for connectivity: ', np.mean(flip_mask))
     ps_general = np.dot(state0_proj_inv, states.T)
     ps_real = (0.5 - ps_general / 2.).real
     ps_imag = (0.5 + 1.0j * ps_general / 2.).real
@@ -686,7 +686,8 @@ def compute_connectivity_sample(state0, states, projector, N_samples, noise_p = 
     N_ups_imag = np.random.binomial(N_samples, ps_imag)
     connectivity = np.sum(flip_mask * (1 - 2 * N_ups_real / N_samples), axis = 0) + 1.0j * np.sum(flip_mask * (1 - 2 * N_ups_imag / N_samples), axis = 0)
 
-    print('sample estimation of connectivity(theta) = ', time() - t)
+    #print('sample estimation of connectivity(theta) = ', time() - t)
+
     return connectivity / projector.nterms
 
 def compute_energy_der_sample(state0, states, hamiltonian, projector, N_samples, noise_p = 0.):
@@ -721,11 +722,11 @@ def compute_energy_der_sample(state0, states, hamiltonian, projector, N_samples,
 
     flip_mask = np.ones(shape=(projector.nterms, states.shape[1], len(js))) if noise_p == 0. else 1. - 2 * (np.random.uniform(0, 1, size=(projector.nterms, states.shape[1], len(js))) < noise_p)
 
-    print('flip mask mean for der energy: ', np.mean(flip_mask), noise_p)
+    #print('flip mask mean for der energy: ', np.mean(flip_mask), noise_p)
     der = np.sum((flip_mask * (1 - 2 * N_ups / N_samples)).dot(js), axis=0)
 
-    print(t_proj, t_ham, t_samp, t_norm)
-    print('sample estimation of energy der numerator(theta) = ', time() - t, 'sampling:', time_sampling)
+    #print(t_proj, t_ham, t_samp, t_norm)
+    #print('sample estimation of energy der numerator(theta) = ', time() - t, 'sampling:', time_sampling)
     return der / projector.nterms
 
 
