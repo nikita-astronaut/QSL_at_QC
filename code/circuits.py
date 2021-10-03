@@ -2275,11 +2275,13 @@ class TFIM_1xL(SU2_symmetrized):
         patterns = []
 
         ### pattern NN vertical odd ###
-        for nlayers in range(4):
-            for x in range(self.Ly):
+        for nlayers in range(self.Ly):
+            for x in range(0, self.Ly, 2):
                 layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
             for x in range(self.Ly):
                 layers.append([[(x), sx]])
+            for x in range(1, self.Ly, 2):
+                layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
 
         return layers, []
 
