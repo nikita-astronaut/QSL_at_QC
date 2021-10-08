@@ -1131,6 +1131,7 @@ class SU2_symmetrized(Circuit):
             for pair in self.dimerization:
                 op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 state = op(state)
+                print(pair)
         elif self.spin == 1:
             for idx, pair in enumerate(self.dimerization):
                 if idx != 0:
@@ -1163,7 +1164,8 @@ class SU2_symmetrized(Circuit):
             state_su2[i] = state[self.basis_bare.index(x)] / norm
 
 
-        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
+        print('norm', np.vdot(state_su2, state_su2))
+        assert np.isclose(np.vdot(state_su2, state_su2), 1.0)
         assert np.isclose(np.dot(state_su2.conj(), self.total_spin(state_su2)) + 3. * self.n_qubits, self.spin * (self.spin + 1) * 4.)
         
         return state_su2
@@ -2278,7 +2280,7 @@ class TFIM_1xL(SU2_symmetrized):
         patterns = []
 
         ### pattern NN vertical odd ###
-        for nlayers in range(self.Ly):
+        for nlayers in range(self.Ly // 2):
             for x in range(0, self.Ly, 2):
                 layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
             for x in range(self.Ly):
