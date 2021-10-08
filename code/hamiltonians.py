@@ -57,6 +57,8 @@ class Hamiltonian(object):
             np.save(os.path.join(workdir, 'energy.npy'), energy)
             np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
         print(repr(energy - self.energy_renorm), 'energies')
+        print(energy[1] - energy[0])
+        exit(-1)
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
         #    for s in self.permutations:

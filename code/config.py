@@ -28,8 +28,8 @@ class opt_parameters:
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
         
-        self.target_norm = 0.98
-        self.lagrange = True if int(sys.argv[6]) == 1 else False
+        self.target_norm = 0.98 if j2 > 1 else 0.49
+        self.lagrange = False#True if int(sys.argv[6]) == 1 else False
         self.Z = 300.
 
         self.test = False
@@ -37,7 +37,7 @@ class opt_parameters:
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly, self.subl = 1, int(sys.argv[5]), 1
-        self.su2 = False
+        self.su2 = True
         self.BC = 'PBC'
         self.spin = 0
         self.noise = False; assert not (self.noise and self.su2)
@@ -81,13 +81,13 @@ class opt_parameters:
                     self.unitary_neel[i, j] = -1
 
 
-        self.hamiltonian = hamiltonians.TFIMChain
+        self.hamiltonian = hamiltonians.HeisenbergChain
         self.ham_params_dict = {'n_qubits' : self.Lx * self.Ly, \
                                 'su2' : self.su2, \
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
-                                'h': j2, \
-                                'xBC' : 'OBC', \
+                                'j2': j2, \
+                                'xBC' : 'PBC', \
                                 'yBC' : self.BC, \
                                 'symmetries' : [s[0] for s in self.symmetries], \
                                 'permutations' : [s[1] for s in self.symmetries], \
@@ -98,8 +98,8 @@ class opt_parameters:
                                 }
 
 
-        self.dimerization = 'AFM' if j2 < 1.0 else 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly)]
-        self.circuit = circuits.TFIM_1xL
+        self.dimerization = [(2 * i, 2 * i + 1) for i in range(self.Ly // 2)]#'AFM' if j2 < 1.0 else 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly)]
+        self.circuit = circuits.SU2_symmetrized_square_1xL
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'subl' : self.subl, \
