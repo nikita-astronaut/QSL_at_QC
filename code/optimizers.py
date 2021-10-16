@@ -37,7 +37,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 20000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
     #lambdas = 0.1 * np.concatenate([\
@@ -256,6 +256,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
 
         if not config.with_mpi or (config.with_mpi and rank == 0):
             obs.write_logs()
+        print(new_params)
 
         #print(rank, new_params, 'new parameters afte update are')
         #state = circuit()

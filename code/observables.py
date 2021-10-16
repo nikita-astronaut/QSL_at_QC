@@ -234,7 +234,7 @@ class Observables(object):
 
         data = [j for i in zip(obs_vals, obs_vals_ed) for j in i]
 
-        self.main_log.write(('{:.7f} {:.7f} {:.7f} {:.7f} ' + '{:.7f}/{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, norm.real, *data))
-        print(('{:.7f} {:.7f} {:.7f} {:.7f} ' + '{:.7f}/{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, norm.real, *data))
+        self.main_log.write(('{:.7f} {:.7f} {:.14f} {:.7f} ' + '{:.7f}/{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, norm.real, *data))
+        print(('{:.7f} {:.7f} {:.14f} {:.7f} ' + '{:.7f}/{:.7f} ' * len(obs_vals) + '\n').format(self.hamiltonian.gse - self.hamiltonian.energy_renorm, energy, fidelity, norm.real, *data), flush=True)
         self.main_log.flush()
         #exit(-1)

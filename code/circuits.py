@@ -1131,7 +1131,6 @@ class SU2_symmetrized(Circuit):
             for pair in self.dimerization:
                 op = ls.Operator(self.basis_bare, [ls.Interaction(self.singletizer, [pair])])
                 state = op(state)
-                print(pair)
         elif self.spin == 1:
             for idx, pair in enumerate(self.dimerization):
                 if idx != 0:
@@ -1304,8 +1303,6 @@ class SU2_symmetrized(Circuit):
             lambda_log = open(os.path.join(self.config.path_to_logs, 'lambda_log.dat'), 'r')
             last_line = lambda_log.readlines()[-1]
             self.lamb = float(last_line)
-            print(eval(arr))
-            #exit(-1)
             return eval(arr)
         except:
             self.lamb = 1.0
@@ -1317,7 +1314,6 @@ class SU2_symmetrized(Circuit):
         self.unitaries_herm = []
         self.derivatives = []
 
-        print(self.params)
         for i in range(len(self.params)):
             unitaries_layer = []
             unitaries_herm_layer = []
@@ -2248,11 +2244,22 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
                     pattern.append((site, siteto))
         patterns.append(deepcopy(pattern))
 
+        ### pattern NNN vertical even ###
+        pattern = []
+        for site in range(self.n_qubits):
+            x, y = site % self.Lx, site // self.Lx
+            xto, yto = x, (y + 2) % self.Ly
+            siteto = xto + yto * self.Lx
+
+            if xto in range(0, self.Lx) and (yto in range(self.Ly) or self.BC == 'PBC'):
+                pattern.append((site, siteto))
+        patterns.append(deepcopy(pattern))
+
 
 
 
         patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns
-        patterns = patterns[:2 * self.Ly]
+        patterns = patterns[:4 * self.Ly]
         print('patterns:', patterns)
         for l in range(1):
             for pattern in patterns:
