@@ -24,7 +24,7 @@ class opt_parameters:
         n_trial = int(sys.argv[3])
         ### preparing the logging ###
         #self.path_to_logs = '/home/cluster/niastr/data/QSL_at_QC//logs/qiskit_2x{:d}_experiments/{:.3f}_{:d}_{:d}_{:.5f}/'.format(j2, int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5]))
-        self.path_to_logs = '/home/cluster/niastr/data/logs_SR3e-1_onlyinv_depth/TFIM_{:d}/{:.3f}_{:d}_{:d}/'.format(int(sys.argv[5]), j2, int(sys.argv[3]), int(sys.argv[4]))
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/logs_SR3e-1_onlyinv_depth/TFIM_{:d}/{:.3f}_{:d}_{:d}/'.format(int(sys.argv[5]), j2, int(sys.argv[3]), int(sys.argv[4]))
         os.makedirs(self.path_to_logs, exist_ok=True)
         self.mode = 'continue'
         
@@ -37,7 +37,7 @@ class opt_parameters:
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly, self.subl = 1, int(sys.argv[5]), 1
-        self.su2 = True
+        self.su2 = False#True
         self.BC = 'PBC'
         self.spin = 0
         self.noise = False; assert not (self.noise and self.su2)
@@ -81,12 +81,12 @@ class opt_parameters:
                     self.unitary_neel[i, j] = -1
 
 
-        self.hamiltonian = hamiltonians.HeisenbergChain
+        self.hamiltonian = hamiltonians.TFIMChain#HeisenbergChain
         self.ham_params_dict = {'n_qubits' : self.Lx * self.Ly, \
                                 'su2' : self.su2, \
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
-                                'j2': j2, \
+                                'h': j2, \
                                 'xBC' : 'PBC', \
                                 'yBC' : self.BC, \
                                 'symmetries' : [s[0] for s in self.symmetries], \
@@ -98,8 +98,8 @@ class opt_parameters:
                                 }
 
 
-        self.dimerization = [(2 * i, 2 * i + 1) for i in range(self.Ly // 2)]#'AFM' if j2 < 1.0 else 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly)]
-        self.circuit = circuits.SU2_symmetrized_square_1xL
+        self.dimerization = 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly // 2)]#'AFM' if j2 < 1.0 else 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly)]
+        self.circuit = circuits.TFIM_1xL#SU2_symmetrized_square_1xL
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'subl' : self.subl, \
@@ -135,8 +135,8 @@ class opt_parameters:
 
 
         #### stochastic parameters ####
-        self.N_samples = 2 ** int(sys.argv[4]) #int(sys.argv[3])#2 ** int(sys.argv[3])
-        self.SR_eig_cut = 3e-1
+        self.N_samples = None#2 ** int(sys.argv[4]) #int(sys.argv[3])#2 ** int(sys.argv[3])
+        self.SR_eig_cut = 3e-3
         self.SR_diag_reg = 0.
         self.SR_scheduler = False#True
 

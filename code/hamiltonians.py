@@ -54,15 +54,22 @@ class Hamiltonian(object):
             energy, ground_state = np.load(os.path.join(workdir, 'energy.npy')), np.load(os.path.join(workdir, 'ground_state.npy'))
         else:
             energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.complex128)
+            print(ground_state.shape)
             np.save(os.path.join(workdir, 'energy.npy'), energy)
             np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
         print(repr(energy - self.energy_renorm), 'energies')
         print(energy[1] - energy[0])
-        exit(-1)
-        #for idx, state in enumerate(ground_state.T):
-        #    print('state', idx)
-        #    for s in self.permutations:
-        #        print(np.dot(state.conj(), state[s]))
+        spins = []
+        all_bonds = []
+        for i in range(self.n_qubits):
+            for j in range(self.n_qubits):
+                if i != j:
+                    all_bonds.append((i, j))
+        total_spin = ls.Operator(self.basis, [ls.Interaction(SS, all_bonds)])
+        for s in ground_state.T:
+            print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits, n_qubits)
+            spins.append(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
+        #exit(-1)
         ## DEBUG
         ''' 
         spins = []

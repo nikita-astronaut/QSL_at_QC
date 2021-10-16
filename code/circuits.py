@@ -1309,7 +1309,7 @@ class SU2_symmetrized(Circuit):
             return eval(arr)
         except:
             self.lamb = 1.0
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01 # + np.pi / 4.
+            return (np.random.uniform(size=len(self.layers)) - 0.5) * 1 # + np.pi / 4.
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -2249,8 +2249,6 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
         patterns.append(deepcopy(pattern))
 
 
-
-
         patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns
         patterns = patterns[:2 * self.Ly]
         print('patterns:', patterns)
@@ -2260,6 +2258,7 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
                     i, j = pair
                     layer = [((i, j), P_ij)]
                     layers.append(deepcopy(layer))
+        layers = [[((0, 3), P_ij)], [((0, 1), P_ij)]]#, [((2, 3), P_ij)]]
         return layers, pair
 
 
@@ -2283,10 +2282,10 @@ class TFIM_1xL(SU2_symmetrized):
         for nlayers in range(self.Ly // 2):
             for x in range(0, self.Ly, 2):
                 layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
-            for x in range(self.Ly):
+            for x in range(0, self.Ly, 2):
                 layers.append([[(x), sx]])
-            for x in range(1, self.Ly, 2):
-                layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
+            #for x in range(1, self.Ly, 2):
+            #    layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
 
         return layers, []
 
@@ -2325,6 +2324,7 @@ class TFIM_1xL(SU2_symmetrized):
         self.unitaries_herm = []
         self.derivatives = []
 
+        print(self.params)
         for i in range(len(self.params)):
             unitaries_layer = []
             unitaries_herm_layer = []
