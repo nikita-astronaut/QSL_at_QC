@@ -34,10 +34,11 @@ class opt_parameters:
 
         self.test = False
         self.reg = 'diag'
+        self.state_target = 0
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly, self.subl = 1, int(sys.argv[5]), 1
-        self.su2 = False#True
+        self.su2 = True#False#True
         self.BC = 'PBC'
         self.spin = 0
         self.noise = False; assert not (self.noise and self.su2)
@@ -51,7 +52,7 @@ class opt_parameters:
         self.symmetries = [
             #utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_y_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
-            utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
+            #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
             #utils.get_Cx_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
             #utils.get_rot_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2), \
@@ -59,9 +60,9 @@ class opt_parameters:
         ]
 
         if int(sys.argv[6]) == 1:
-            self.eigenvalues = [1]
-            self.sectors = [0]
-            self.degrees = [2]
+            self.eigenvalues = [1, 1]
+            self.sectors = [0, 0]
+            self.degrees = [self.Ly, 2]
         else:
             self.eigenvalues = []
             self.sectors = []
@@ -81,12 +82,13 @@ class opt_parameters:
                     self.unitary_neel[i, j] = -1
 
 
-        self.hamiltonian = hamiltonians.TFIMChain#HeisenbergChain
+        self.hamiltonian = hamiltonians.HeisenbergChain
         self.ham_params_dict = {'n_qubits' : self.Lx * self.Ly, \
                                 'su2' : self.su2, \
                                 'basis' : self.basis, \
                                 'Lx' : self.Lx, 'Ly': self.Ly, \
-                                'h': j2, \
+                                'j_pm' : 1.0, \
+                                'j2': j2, \
                                 'xBC' : 'PBC', \
                                 'yBC' : self.BC, \
                                 'symmetries' : [s[0] for s in self.symmetries], \
@@ -94,12 +96,13 @@ class opt_parameters:
                                 'sectors' : self.sectors, \
                                 'spin' : self.spin, \
                                 'unitary' : self.unitary, \
-                                'workdir' : self.path_to_logs
+                                'workdir' : self.path_to_logs, \
+                                'state_target' : self.state_target
                                 }
 
 
-        self.dimerization = 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly // 2)]#'AFM' if j2 < 1.0 else 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly)]
-        self.circuit = circuits.TFIM_1xL#SU2_symmetrized_square_1xL
+        self.dimerization = [(2 * i, 2 * i + 1) for i in range(self.Ly // 2)]#'AFM' if j2 < 1.0 else 'para'#[(2 * i, 2 * i + 1) for i in range(self.Ly)]
+        self.circuit = circuits.SU2_symmetrized_square_1xL
         self.circuit_params_dict = {'Lx' : self.Lx, \
                                     'Ly' : self.Ly, \
                                     'subl' : self.subl, \
@@ -126,10 +129,10 @@ class opt_parameters:
 
 
         self.optimizer = optimizers.Optimizer
-        self.algorithm = optimizers.natural_gradiend_descend #SPSA_gradiend_descend#Lanczos_energy_extrapolation #natural_gradiend_descend#SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
+        self.algorithm = optimizers.natural_gradiend_descend # supervised_learning #natural_gradiend_descend #SPSA_gradiend_descend#Lanczos_energy_extrapolation #natural_gradiend_descend#SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
         self.write_logs = True
 
-        self.opt_params_dict = {'lr' : 3e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.opt_params_dict = {'lr' : 1e-2}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
         self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = None; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 

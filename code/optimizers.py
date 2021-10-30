@@ -37,14 +37,9 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 20000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
-    #lambdas = 0.1 * np.concatenate([\
-    #                              np.ones(2000) * 3., \
-    #                              np.ones(1000) * 1., \
-    #                              np.ones(1000) * 0.3 \
-    #                             ])
     lambdas = 1. * np.ones(100000)
 
 
@@ -61,26 +56,6 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
             grads_exact, ij_exact, der_one_exact = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
         else:
             grads_exact, ij_exact, der_one_exact, grads, ij, der_one = circuit.get_natural_gradients(hamiltonian, projector, config.N_samples)
-
-            #print(ij)
-            #exit(-1)
-
-        #print('get all gradients and M_ij', time() - t)
-        #print('grads_exact:', grads_exact)
-        #print('grads_sampled:', grads)
-
-        #print('connectivity exact', der_one_exact)
-        #print('connectivity sampled', der_one)
-
-
-        #print('connectivities')
-        #for conexact, consampl in zip(der_one_exact, der_one):
-        #    print(conexact, consampl)
-
-        #np.save('conn_exact.npy', der_one_exact)
-        #np.save('conn_sampl.npy', der_one)
-
-        #print('grads')
 
         if config.test:
             print('grads')
@@ -99,8 +74,6 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
                     assert np.abs((ij_exact[i, j] - np.conj(der_one_exact)[i] * der_one_exact[j]).real - (ij[i, j] - np.conj(der_one)[i] * der_one[j]).real) < 1e-3
             print(np.linalg.eigh(ij_exact - np.outer(np.conj(der_one_exact), der_one_exact))[0])
             print(np.linalg.eigh(ij - np.outer(np.conj(der_one), der_one))[0])
-        #np.save('grads_exact.npy', grads_exact)
-        #np.save('grads_sampl.npy', grads)
 
         if config.test:
             for i in range(ij.shape[0]):
@@ -108,16 +81,10 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
                     if i == j:
                         print(i, j, ij_exact[i, j].real, ij[i, j].real) 
 
-        #np.save('MT_exact.npy', ij_exact)
-        #np.save('MT_sampl.npy', ij)
-
-        #print('ij discrepancy:',  np.linalg.norm(ij - ij_exact) / np.linalg.norm(ij_exact))
         if config.N_samples is not None:
             MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
         if config.test or config.N_samples is None:
             MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
-
-        #print('MT discrepancy:',  np.linalg.norm(MT - MT_exact) / np.linalg.norm(MT_exact))
 
         if test:
             for i in range(len(grads)):
@@ -151,47 +118,18 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
                     print(ij[i, k], der, i, k)
                     assert np.abs((ij[i, k] - der)) < 1e-3
 
-            #print(j[i], der)
-            #assert np.isclose(j[i], der)
-            #circuit.set_parameters(cur_params)
-        
-
-        #circuit.set_parameters(cur_params)
         if config.N_samples is not None:
             MT = (ij - np.einsum('i,j->ij', der_one.conj(), der_one)).real
-            # MT += config.SR_diag_reg * np.diag(np.diag(MT))
-            #assert np.allclose(MT, MT.T.conj())
-            #for i in range(MT.shape[0]):
-            #    for j in range(MT.shape[1]):
-            #        print(ij[i, j], ij[j, i])
-            #exit(-1)
 
-
-            '''
-            if config.reg == 'svd':
-                s, u = np.linalg.eigh(MT)
-                MT_inv = np.zeros(MT.shape)
-                keep_lambdas = (s / s.max()) > config.SR_eig_cut
-                for lambda_idx in range(len(s)):
-                    if not keep_lambdas[lambda_idx]:
-                        continue
-                    MT_inv += (1. / s[lambda_idx]) * \
-                            np.einsum('i,j->ij', u[:, lambda_idx], u[:, lambda_idx])
-            else: 
-            '''
             MT2 = MT @ MT.T.conj()
             eigvals, eigstates = np.linalg.eigh(MT2)
             eigvals += 1e-10
             # assert np.all(eigvals > 0)
             MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT.shape[0]) * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)
             MT_inv = np.linalg.inv(MT)
-            #MT_inv = np.linalg.inv(MT + config.SR_eig_cut * np.eye(MT.shape[0]))
 
             circuit.forces = grads.copy()
-            #grads = MT_inv.dot(grads - lambdas[n_iter] * der_one.real)
             grads = MT_inv.dot(grads - circuit.lamb * der_one.real * (1. if config.lagrange else 0.))  # FIXME: shall we include this to the SR?
-            #print('mtinv, grads, derone, eigvals, eigvals after:', MT_inv, grads, der_one, eigvals, np.linalg.eigh(MT)[0])
-            #print('ij, derone:', ij, der_one)
             circuit.forces_SR = grads.copy()
 
         if config.test or config.N_samples is None:
@@ -204,29 +142,10 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
             MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
             MTe_inv = np.linalg.inv(MT)
 
-            #assert np.allclose(MT_exact, MT_exact.T)
-
-            #assert np.allclose(MTe_inv, np.linalg.inv(MT_exact))
-
             circuit.forces_exact = grads_exact.copy()
             grads_exact = MTe_inv.dot(grads_exact)
             circuit.forces_SR_exact = grads_exact.copy()
-            #if np.sum(np.abs(grads)) / len(grads) > 3:
-            #    print('flipped')
-            #    grads = 3 * grads / np.sqrt(np.sum(grads ** 2))
 
-        
-            #print('grads SR')
-            #for conexact, consampl in zip(grads_exact, grads):
-            #    print(conexact, consampl)
-
-            #np.save('gradsSR_exact.npy', grads_exact)
-            #np.save('gradsSR_sampl.npy', grads)
-
-            #np.save('MT_inv_exact.npy', MTe_inv)
-            #np.save('MT_inv_sampl.npy', MT_inv)
-
-            #exit(-1)
         if config.N_samples is not None:
             new_params = (cur_params - lr * grads * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)).real
             if config.lagrange:
@@ -236,7 +155,6 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         if config.test:
             print('forces_sampled =', repr(grads))
             print('forces_exact =', repr(grads_exact))
-            #print('current parameters =', repr(new_params))
 
         if config.max_energy_increase_threshold is None:
             circuit.set_parameters(new_params)
@@ -252,22 +170,79 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 10000, lr = 0.003,
         parameters.append(circuit.get_parameters())
 
 
-        #circuit.set_parameters(new_params)
 
         if not config.with_mpi or (config.with_mpi and rank == 0):
             obs.write_logs()
-
-        #print(rank, new_params, 'new parameters afte update are')
-        #state = circuit()
-        #assert np.isclose(state.conj().dot(state), 1.0)
-        #state_proj = projector(state)
-        #state_proj = state_proj / np.sqrt(np.dot(state_proj.conj(), state_proj))
-
-        #print('iteration: {:d}, energy = {:.7f}, fidelity = {:.7f}'.format(n_iter, _circuit_energy(new_params, *args) - hamiltonian.energy_renorm, \
-        #                np.abs(np.dot(hamiltonian.ground_state[0].conj(), state_proj)) ** 2))
-        #print('iteration took', time() - t_iter)
-        #print('lambda = {:.3f}'.format(circuit.lamb))
     return circuit
+
+
+
+
+
+def supervised_learning(obs, init_values, args, n_iter = 20000, lr = 0.003, test = False):
+    circuit, hamiltonian, config, projector = args
+
+    energies = []
+    parameters = []
+
+    max_iter = n_iter
+    for n_iter in range(n_iter):
+        cur_params = circuit.get_parameters()
+        grads_exact, ij_exact, der_one_exact = circuit.get_supervised_gradients(hamiltonian, projector)
+
+        if False:
+            def functional(state):
+                #print(np.vdot(state, state), np.vdot(hamiltonian.state_target, hamiltonian.state_target), hamiltonian.state_target.shape, state.shape)
+                return np.abs(np.vdot(state, hamiltonian.state_target)) ** 2
+
+            for i in range(len(grads_exact)):
+                state_i = circuit()
+                F0 = functional(state_i)
+                new_params = cur_params.copy()
+                new_params[i] += 1e-6
+                circuit.set_parameters(new_params)
+                state_f = circuit()
+                F1 = functional(state_f)
+                der = (F1 - F0) / 1e-6
+
+                print(grads_exact[i] / der, grads_exact[i], der)
+                # assert np.isclose(der_one[i], der)
+                circuit.set_parameters(cur_params)
+            print('F0:', F0)
+
+
+        MT_exact = (ij_exact - np.einsum('i,j->ij', der_one_exact.conj(), der_one_exact)).real
+        MT_exact += config.SR_diag_reg * np.diag(np.diag(MT_exact))
+        MT2 = MT_exact @ MT_exact.T.conj()
+        eigvals, eigstates = np.linalg.eigh(MT2)
+        eigvals += 1e-10
+        assert np.all(eigvals > 0)
+        MT = np.einsum('i,ij,ik->jk', np.sqrt(eigvals), eigstates.T, eigstates.T.conj()) + config.SR_eig_cut * np.eye(MT2.shape[0])
+        MTe_inv = np.linalg.inv(MT)
+
+        circuit.forces_exact = grads_exact.copy()
+        grads_exact = MTe_inv.dot(grads_exact)
+        circuit.forces_SR_exact = grads_exact.copy()
+
+        new_params = (cur_params - lr * grads_exact).real
+        circuit.set_parameters(new_params)
+
+        if not config.with_mpi or (config.with_mpi and rank == 0):
+            obs.write_logs()
+    return circuit
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
