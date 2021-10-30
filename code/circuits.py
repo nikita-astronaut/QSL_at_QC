@@ -76,14 +76,6 @@ class Circuit(object):
         return grads, ij, j, grads_sampling, ij_sampling, j_sampling
 
 
-    def get_supervised_gradients(self, hamiltonian, projector):
-        ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, None, 'standard')
-        grads = self.get_supervised_derivatives(hamiltonian)
-
-        return grads, ij, j
-
-
-
     def _get_derivative_idx(self, param_idx):
         return self.derivatives[param_idx]
 
@@ -322,6 +314,12 @@ class SU2_symmetrized(Circuit):
                 state = gate(state)
         return state
 
+    def get_supervised_gradients(self, hamiltonian, projector):
+        ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, None, 'standard')
+        grads = self.get_supervised_derivatives(hamiltonian)
+
+        return grads, ij, j
+
 
     def get_supervised_derivatives(self, hamiltonian):
         state_target = hamiltonian.state_target
@@ -329,11 +327,12 @@ class SU2_symmetrized(Circuit):
 
         #print(np.dot(self.der_states.conj(), state_target) * np.dot(state_target.conj(), state))
 
-        derivatives = np.zeros(len(self.der_states), dtype=np.complex128)
-        for idx, state_t in enumerate(hamiltonian.all_states.T):
-            #print(np.abs(np.vdot(state_t.conj(), state)) ** 2)
-            derivatives -= 2 * np.real(np.dot(self.der_states.conj(), state_t) * np.dot(state_t.conj(), state)) * (1.0 if idx == 0 else -1.0)
-        return derivatives#-2 * np.real(np.dot(self.der_states.conj(), state_target) * np.dot(state_target.conj(), state))
+        #derivatives = np.zeros(len(self.der_states), dtype=np.complex128)
+        #for idx, state_t in enumerate(hamiltonian.all_states.T):
+        #    #print(np.abs(np.vdot(state_t.conj(), state)) ** 2)
+        #    derivatives -= 2 * np.real(np.dot(self.der_states.conj(), state_t) * np.dot(state_t.conj(), state)) * (1.0 if idx == 0 else -1.0)
+        return -2 * np.real(np.dot(self.der_states.conj(), state_target) * np.dot(state_target.conj(), state))
+
 
 
     def get_all_derivatives(self, hamiltonian, projector, N_samples, method='standard'):
@@ -2276,8 +2275,10 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
         patterns.append(deepcopy(pattern))
 
 
+
+
         patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns
-        patterns = patterns[:1 * self.Ly]# // 2]
+        patterns = patterns[:4 * self.Ly]
         print('patterns:', patterns)
         for l in range(1):
             for pattern in patterns:
@@ -2285,35 +2286,9 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
                     i, j = pair
                     layer = [((i, j), P_ij)]
                     layers.append(deepcopy(layer))
-        #layers = [[((0, 1), P_ij)], [((2, 3), P_ij)], [((0, 3), P_ij)], [((1, 2), P_ij)], [((0, 2), P_ij)]]#, [((5, 1), P_ij)]]#, [((0, 1), P_ij)]]#, [((2, 3), P_ij)]]
-
-        #idxs = np.array([0, 1, 2, 3, 4, 5, 6, 8, 9], dtype=np.int64)
-        return np.array(layers), pair#[idxs]
-
-    
-    def _initial_state(self):
-        if self.ini_state is not None:
-            return self.ini_state.copy()
-
-        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state[0] = 1.
-
-        for i in np.arange(0, self.n_qubits, 2):
-            op = ls.Operator(self.basis_bare, [ls.Interaction(sx, [(i,)])])
-            state = op(state)
-
-        assert np.isclose(np.dot(state.conj(), state), 1.0)
-
-        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
-        for i in range(self.basis.number_states):
-            x = self.basis.states[i]
-            _, _, norm = self.basis.state_info(x)
-            state_su2[i] = state[self.basis_bare.index(x)] / norm
+        return layers, pair
 
 
-        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
-        return state_su2
-    
 
 
 class TFIM_1xL(SU2_symmetrized):
@@ -2334,10 +2309,10 @@ class TFIM_1xL(SU2_symmetrized):
         for nlayers in range(self.Ly // 2):
             for x in range(0, self.Ly, 2):
                 layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
-            for x in range(0, self.Ly, 2):
+            for x in range(self.Ly):
                 layers.append([[(x), sx]])
-            #for x in range(1, self.Ly, 2):
-            #    layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
+            for x in range(1, self.Ly, 2):
+                layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
 
         return layers, []
 
@@ -2376,7 +2351,6 @@ class TFIM_1xL(SU2_symmetrized):
         self.unitaries_herm = []
         self.derivatives = []
 
-        print(self.params)
         for i in range(len(self.params)):
             unitaries_layer = []
             unitaries_herm_layer = []
@@ -2391,85 +2365,6 @@ class TFIM_1xL(SU2_symmetrized):
                     derivatives_layer.append(ls.Operator(self.basis, [ls.Interaction(1.0j * operator, [pair])]))
 
             
-            self.unitaries.append(unitaries_layer)
-            if not reduced:
-                self.unitaries_herm.append(unitaries_herm_layer)
-                self.derivatives.append(derivatives_layer)
-        return
-
-
-class XXZ_1xL(SU2_symmetrized):
-    def __init__(self, subl, Lx, Ly, basis, config, unitary, BC, spin=0):
-        super().__init__(subl, Lx, Ly, basis, config, unitary, BC, spin)
-        self.n_qubits = Lx * Ly
-
-        return
-
-    def _get_dimerizarion_layers(self):
-        layers = []
-        P_ij = (SS + np.eye(4)) / 2.
-
-
-        patterns = []
-
-        ### pattern NN vertical odd ###
-        for nlayers in range(1):#self.Ly // 3):
-            for x in range(0, self.Ly):
-                layers.append([[(x, (x + 1) % self.Ly), np.kron(sz, sz)]])
-            for x in range(0, self.Ly):
-                layers.append([[(x, (x + 1) % self.Ly), np.kron(sx, sx) + np.kron(sy, sy)]])
-
-        print(np.array(layers)[np.array([1, 4, 5, 6])])
-        #exit(-1)
-        return np.array(layers)[np.array([1, 4, 5, 6])], []
-
-
-    '''
-    def _initial_state(self):
-        if self.ini_state is not None:
-            return self.ini_state.copy()
-
-        state = np.zeros(2 ** self.n_qubits, dtype=np.complex128)
-        state[0] = 1.
-
-        for i in np.arange(0, self.n_qubits, 2):
-            op = ls.Operator(self.basis_bare, [ls.Interaction(sx, [(i,)])])
-            state = op(state)
-
-        assert np.isclose(np.dot(state.conj(), state), 1.0)
-
-        state_su2 = np.zeros(self.basis.number_states, dtype=np.complex128)
-        for i in range(self.basis.number_states):
-            x = self.basis.states[i]
-            _, _, norm = self.basis.state_info(x)
-            state_su2[i] = state[self.basis_bare.index(x)] / norm
-
-
-        assert np.isclose(np.dot(state_su2.conj(), state_su2), 1.0)
-        return state_su2
-    '''
-
-
-    def _refresh_unitaries_derivatives(self, reduced = False):
-        self.unitaries = []
-        self.unitaries_herm = []
-        self.derivatives = []
-
-        print(self.params)
-        for i in range(len(self.params)):
-            unitaries_layer = []
-            unitaries_herm_layer = []
-            derivatives_layer = []
-
-            par = self.params[i]
-
-            for pair, operator in self.layers[i]:
-                unitaries_layer.append(ls.Operator(self.basis, [ls.Interaction(scipy.linalg.expm(1.0j * par * operator), [pair])]))
-                if not reduced:
-                    unitaries_herm_layer.append(ls.Operator(self.basis, [ls.Interaction(scipy.linalg.expm(-1.0j * par * operator), [pair])]))
-                    derivatives_layer.append(ls.Operator(self.basis, [ls.Interaction(1.0j * operator, [pair])]))
-
-
             self.unitaries.append(unitaries_layer)
             if not reduced:
                 self.unitaries_herm.append(unitaries_herm_layer)

@@ -53,23 +53,19 @@ class Hamiltonian(object):
         if False:#os.path.isfile(os.path.join(workdir, 'ground_state.npy')):
             energy, ground_state = np.load(os.path.join(workdir, 'energy.npy')), np.load(os.path.join(workdir, 'ground_state.npy'))
         else:
-            energy, ground_state = ls.diagonalize(self._matrix, k = 12, dtype=np.complex128)
-            print(ground_state.shape)
-            np.save(os.path.join(workdir, 'energy.npy'), energy)
-            np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
+            energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.complex128)
+            #np.save(os.path.join(workdir, 'energy.npy'), energy)
+            #np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
         print(repr(energy - self.energy_renorm), 'energies')
         print(energy[1] - energy[0])
-        state_target = ground_state.T[state_target]
-        self.all_states = ground_state
-
-        gaps = (energy - energy[0])[1:]
-        print('sum 1 / delta_i:', np.sum(1 / gaps))
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
         #    for s in self.permutations:
         #        print(np.dot(state.conj(), state[s]))
         ## DEBUG
-        
+        state_target = ground_state.T[state_target]
+        self.all_states = ground_state
+        ''' 
         spins = []
         all_bonds = []
         for i in range(self.n_qubits):
@@ -80,17 +76,18 @@ class Hamiltonian(object):
         for s in ground_state.T:
             print(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits, n_qubits)
             spins.append(np.dot(s.conj(), total_spin(s)) + 3. * self.n_qubits)
+        #exit(-1)
         ### END DEBUG
         for idx, s in enumerate(spins):
             if np.isclose(s / 4, self.spin * (self.spin + 1)):
                 break
         print('idx = ', idx)
-        
+        '''
         idx = 0
         ### rewrite ground state in terms of non-symmetrized basis ###
         gs_nonsymm = np.zeros(basis.number_states, dtype=np.complex128)
-
         state_target_nosymm = np.zeros(basis.number_states, dtype=np.complex128)
+
         gs_symm = ground_state[:, idx]  # FIXME
         for i in range(basis.number_states):
             nonsymm_state = basis.states[i]
@@ -98,6 +95,7 @@ class Hamiltonian(object):
             if norm != 0.:
                 gs_nonsymm[i] = gs_symm[self.basis.index(rep)] * norm * character
                 state_target_nosymm[i] = state_target[self.basis.index(rep)] * norm * character
+
 
         # gs_nonsymm = gs_nonsymm * np.sqrt(2)  # FIXME FIXME FIXME
         self.ground_state = gs_nonsymm[np.newaxis, :]
@@ -109,9 +107,6 @@ class Hamiltonian(object):
         ### finally obtaining the GS in the nonsymmetric basis (provided from config) ###
         self.basis = basis
         self._matrix, self._terms, self.bonds, self.j2s = self._get_Hamiltonian_matrix(**kwargs)   
-        print(self.bonds)
-        print(self.j2s)
-        #exit(-1)
 
         assert np.isclose(np.dot(self._matrix(gs_nonsymm).conj(), gs_nonsymm), energy[idx])
 
@@ -183,10 +178,9 @@ class HeisenbergSquare(Hamiltonian):
     def _get_Hamiltonian_matrix(self, Lx, Ly, j_pm = +1., j_zz = 1., j2=0., xBC='PBC', yBC = 'PBC'):
         #assert Lx % 2 == 0  # here we only ocnsider bipartite systems
         #assert Ly % 2 == 0
-        op = (j_pm * (np.kron(sx, sx) + np.kron(sy, sy)) + j_zz * np.kron(jz, jz) + np.eye(4)) / 2.
 
-        operator = op#P_ij
-        operator_j2 = op#P_ij
+        operator = P_ij
+        operator_j2 = P_ij
         operatorun = P_ijun
         operator_j2un = P_ijun
 
@@ -389,9 +383,8 @@ class HeisenbergChain(Hamiltonian):
         #assert Lx % 2 == 0  # here we only ocnsider bipartite systems
         #assert Ly % 2 == 0
 
-        op = (j_pm * (np.kron(sx, sx) + np.kron(sy, sy)) + j_zz * np.kron(sz, sz) + np.eye(4)) / 2.
-        operator = op
-        operator_j2 = op
+        operator = P_ij
+        operator_j2 = P_ij
         operatorun = P_ijun
         operator_j2un = P_ijun
 
