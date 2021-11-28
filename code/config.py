@@ -24,7 +24,7 @@ class opt_parameters:
         n_trial = int(sys.argv[3])
         ### preparing the logging ###
         #self.path_to_logs = '/home/cluster/niastr/data/QSL_at_QC//logs/qiskit_2x{:d}_experiments/{:.3f}_{:d}_{:d}_{:.5f}/'.format(j2, int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[5]))
-        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/fromexactHchain_varygap_otherarch_SR3e-3_{:d}/{:.3f}_{:d}_{:d}/'.format(int(sys.argv[5]), j2, int(sys.argv[3]), int(sys.argv[4]))
+        self.path_to_logs = '/home/astronaut/Documents/QSL_at_QC/logs/thermal_test_{:d}/{:.3f}_{:d}_{:d}_{:.3f}/'.format(int(sys.argv[5]), j2, int(sys.argv[3]), int(sys.argv[4]), float(sys.argv[6]))
 
         ### DEBUG ###
         '''
@@ -51,7 +51,7 @@ class opt_parameters:
 
         self.test = False
         self.reg = 'diag'
-        self.state_target = 0
+        self.state_target = 4
 
         ### setting up geometry and parameters ###
         self.Lx, self.Ly, self.subl = 1, int(sys.argv[5]), 1
@@ -76,7 +76,7 @@ class opt_parameters:
             #utils.get_Cy_symmetry_map(self.Lx, self.Ly, basis=self.basis, su2=self.su2)
         ]
 
-        if int(sys.argv[6]) == 1:
+        if False:#int(sys.argv[6]) == 1:
             self.eigenvalues = [1, 1]
             self.sectors = [0, 0]
             self.degrees = [self.Ly, 2]
@@ -146,10 +146,10 @@ class opt_parameters:
 
 
         self.optimizer = optimizers.Optimizer
-        self.algorithm = optimizers.natural_gradiend_descend # supervised_learning #natural_gradiend_descend #SPSA_gradiend_descend#Lanczos_energy_extrapolation #natural_gradiend_descend#SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
+        self.algorithm = optimizers.gradient_classical_monte_carlo#natural_gradiend_descend #SPSA_gradiend_descend#Lanczos_energy_extrapolation #natural_gradiend_descend#SPSA_gradiend_descend# projected_energy_estimation #optimizers.SPSA_gradiend_descend
         self.write_logs = True
 
-        self.opt_params_dict = {'lr' : 1e-3}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
+        self.opt_params_dict = {'beta' : float(sys.argv[6])}#{'method' : 'BFGS', 'options' : {'gtol' : 1e-12, 'disp' : True}}
         self.SPSA_epsilon = 3e-2; self.max_energy_increase_threshold = None; self.SPSA_hessian_averages = 1; self.SPSA_gradient_averages = 1
 
 

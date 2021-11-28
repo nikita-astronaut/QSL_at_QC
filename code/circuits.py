@@ -262,7 +262,7 @@ class SU2_symmetrized(Circuit):
         self.ini_state = self._initial_state()
 
         ### defining operator locs ###
-        self.layers, self.pairs = self._get_dimerizarion_layers()
+        self.layers, self.pairs, self.meta_idxs = self._get_dimerizarion_layers()
 
 
         if not self.config.with_mpi or (self.config.with_mpi and rank == 0):
@@ -314,24 +314,31 @@ class SU2_symmetrized(Circuit):
                 state = gate(state)
         return state
 
-    def get_supervised_gradients(self, hamiltonian, projector):
-        ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, None, 'standard')
+    def get_supervised_gradients(self, hamiltonian, projector, SR=True):
+        if SR:
+            ij, j, ij_sampling, j_sampling = self.get_metric_tensor(projector, None, 'standard')
+        else:
+            ij, j = None, None
         grads = self.get_supervised_derivatives(hamiltonian)
 
         return grads, ij, j
+        
 
 
     def get_supervised_derivatives(self, hamiltonian):
         state_target = hamiltonian.state_target
         state = self.__call__()
 
-        #print(np.dot(self.der_states.conj(), state_target) * np.dot(state_target.conj(), state))
+        self.der_states = np.asfortranarray(np.tile(self._initial_state()[..., np.newaxis], (1, len(self.params))))
+        for i in range(len(self.params)):
+            self.der_states = self.unitaries[i][0](self.der_states)
+            self.der_states[..., i] = self.derivatives[i][0](self.der_states[..., i])
+        self.der_states = self.der_states.T
 
-        #derivatives = np.zeros(len(self.der_states), dtype=np.complex128)
-        #for idx, state_t in enumerate(hamiltonian.all_states.T):
-        #    #print(np.abs(np.vdot(state_t.conj(), state)) ** 2)
-        #    derivatives -= 2 * np.real(np.dot(self.der_states.conj(), state_t) * np.dot(state_t.conj(), state)) * (1.0 if idx == 0 else -1.0)
-        return -2 * np.real(np.dot(self.der_states.conj(), state_target) * np.dot(state_target.conj(), state))
+
+        return -2 * np.real(np.dot(self.der_states.conj(), hamiltonian(state)))
+
+        #-2 * np.real(np.dot(self.der_states.conj(), state_target) * np.dot(state_target.conj(), state))
 
 
 
@@ -1325,7 +1332,14 @@ class SU2_symmetrized(Circuit):
             return eval(arr)
         except:
             self.lamb = 1.0
-            return (np.random.uniform(size=len(self.layers)) - 0.5) * 0.01 # + np.pi / 4.
+
+            meta_params = (np.random.uniform(size=len(np.unique(self.meta_idxs))) - 0.5) * 0.01
+
+            full_params = []
+            for i in range(len(self.meta_idxs)):
+                full_params.append(meta_params[self.meta_idxs[i]])
+
+            return np.array(full_params)
 
 
     def _refresh_unitaries_derivatives(self, reduced = False):
@@ -2279,14 +2293,16 @@ class SU2_symmetrized_square_1xL(SU2_symmetrized):
 
         patterns = patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns + patterns
         patterns = patterns[:4 * self.Ly]
-        print('patterns:', patterns)
+
+        meta_labels = []
         for l in range(1):
-            for pattern in patterns:
+            for idx, pattern in enumerate(patterns):
                 for pair in pattern:
                     i, j = pair
                     layer = [((i, j), P_ij)]
                     layers.append(deepcopy(layer))
-        return layers, pair
+                    meta_labels.append(idx)
+        return layers, pair, np.array(meta_labels)
 
 
 

@@ -53,11 +53,13 @@ class Hamiltonian(object):
         if False:#os.path.isfile(os.path.join(workdir, 'ground_state.npy')):
             energy, ground_state = np.load(os.path.join(workdir, 'energy.npy')), np.load(os.path.join(workdir, 'ground_state.npy'))
         else:
-            energy, ground_state = ls.diagonalize(self._matrix, k = 2, dtype=np.complex128)
+            energy, ground_state = ls.diagonalize(self._matrix, k = 10, dtype=np.complex128)
             #np.save(os.path.join(workdir, 'energy.npy'), energy)
             #np.save(os.path.join(workdir, 'ground_state.npy'), ground_state)
+        self.energies = energy - self.energy_renorm
         print(repr(energy - self.energy_renorm), 'energies')
         print(energy[1] - energy[0])
+        #exit(-1)
         #for idx, state in enumerate(ground_state.T):
         #    print('state', idx)
         #    for s in self.permutations:

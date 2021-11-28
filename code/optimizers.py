@@ -65,6 +65,44 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 5000, lr = 0.003, 
             #print(ij)
             #exit(-1)
 
+        Nmeta = len(np.unique(circuit.meta_idxs))
+
+        grads_exact_meta = np.zeros(Nmeta, dtype=np.float64)
+        grads_meta = np.zeros(Nmeta, dtype=np.float64)
+        der_one_exact_meta = np.zeros(Nmeta, dtype=np.complex128)
+        der_one_meta = np.zeros(Nmeta, dtype=np.complex128)
+
+
+        for i in range(len(grads)):
+            #grads_exact_meta[circuit.meta_idxs[i]] += grads_exact[i]
+            grads_meta[circuit.meta_idxs[i]] += grads[i]
+            #der_one_exact_meta[circuit.meta_idxs[i]] += der_one_exact[i]
+            der_one_meta[circuit.meta_idxs[i]] += der_one[i]
+        #print(grads, grads_meta)
+        #print(circuit.meta_idxs)
+        #exit(-1)
+
+        #ij_exact_meta = np.zeros((Nmeta, Nmeta), dtype=np.complex128)
+        ij_meta = np.zeros((Nmeta, Nmeta), dtype=np.complex128)
+
+        for i in range(len(grads)):
+            for j in range(len(grads)):
+                #ij_exact_meta[circuit.meta_idxs[i], circuit.meta_idxs[j]] += ij_exact[i, j]
+                ij_meta[circuit.meta_idxs[i], circuit.meta_idxs[j]] += ij[i, j]
+
+        grads_exact = grads_exact_meta
+        grads = grads_meta
+        #der_one_exact = der_one_exact_meta
+        der_one = der_one_meta
+        #ij_exact = ij_exact_meta
+
+        ij = ij_meta
+
+
+        cur_params_meta = np.zeros(Nmeta, dtype=np.float64)
+        for i in range(len(cur_params)):
+            cur_params_meta[circuit.meta_idxs[i]] = cur_params[i]
+
         #print('get all gradients and M_ij', time() - t)
         #print('grads_exact:', grads_exact)
         #print('grads_sampled:', grads)
@@ -228,15 +266,20 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 5000, lr = 0.003, 
 
             #exit(-1)
         if config.N_samples is not None:
-            new_params = (cur_params - lr * grads * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)).real
+            new_params_meta = (cur_params_meta - lr * grads * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)).real
             if config.lagrange:
                 circuit.lamb -= (circuit.norm - config.target_norm) * config.Z * lr * ((1. - n_iter / max_iter) if config.SR_scheduler else 1.0)
         else:
-            new_params = (cur_params - lr * grads_exact).real
+            new_params_meta = (cur_params_meta - lr * grads_exact).real
         if config.test:
             print('forces_sampled =', repr(grads))
             print('forces_exact =', repr(grads_exact))
             #print('current parameters =', repr(new_params))
+
+
+        new_params = cur_params * 0.
+        for i in range(len(cur_params)):
+            new_params[i] = new_params_meta[circuit.meta_idxs[i]]
 
         if config.max_energy_increase_threshold is None:
             circuit.set_parameters(new_params)
@@ -317,11 +360,49 @@ def supervised_learning(obs, init_values, args, n_iter = 20000, lr = 0.003, test
         circuit.forces_SR_exact = grads_exact.copy()
 
         new_params = (cur_params - lr * grads_exact).real
+        print(repr(new_params))
         circuit.set_parameters(new_params)
 
         if not config.with_mpi or (config.with_mpi and rank == 0):
             obs.write_logs()
     return circuit
+
+
+def gradient_classical_monte_carlo(obs, init_values, args, n_iter = 20000, beta=1, lr=3e-3, **kwargs):
+    circuit, hamiltonian, config, projector = args
+
+
+    state = circuit.__call__()
+    energies = [np.vdot(state, hamiltonian(state)).real]
+    parameters = [circuit.get_parameters()]
+
+    accept_history = []
+
+    for it in range(n_iter):
+        grads_exact, _, _ = circuit.get_supervised_gradients(hamiltonian, projector, SR=False)
+
+        new_params = parameters[-1] + grads_exact * lr + np.random.normal(loc=0.0, scale=np.sqrt(2 * lr / beta), size=len(grads_exact))
+        circuit.set_parameters(new_params)
+
+        new_state = circuit.__call__()
+        new_energy = np.vdot(new_state, hamiltonian(new_state)).real
+
+        accept = True #(np.random.uniform(0, 1) < np.exp(-beta * (new_energy - energies[-1])))
+        accept_history.append(accept)
+        if accept:
+            parameters.append(new_params)
+            energies.append(new_energy)
+        else:
+            circuit.set_parameters(parameters[-1])
+            parameters.append(parameters[-1])
+            energies.append(energies[-1])
+        # print('accept:', np.mean(accept_history))
+        print('energy:', np.mean(energies[-100:]) - hamiltonian.energy_renorm)
+
+        obs.write_logs()
+    return
+        
+
 
 
 
