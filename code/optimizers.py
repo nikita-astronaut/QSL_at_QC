@@ -2,11 +2,6 @@ import scipy as sp
 import numpy as np
 import utils
 from time import time
-import mpi4py
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-size = comm.Get_size()
 
 
 def gradiend_descend(energy_val, init_values, args, circuit = None, \
@@ -37,7 +32,7 @@ def gradiend_descend(energy_val, init_values, args, circuit = None, \
         #print(new_params)
     return circuit
 
-def natural_gradiend_descend(obs, init_values, args, n_iter = 5000, lr = 0.003, test = False):
+def natural_gradiend_descend(obs, init_values, args, n_iter = 1000, lr = 0.003, test = False):
     circuit, hamiltonian, config, projector = args
 
     #lambdas = 0.1 * np.concatenate([\
@@ -281,15 +276,7 @@ def natural_gradiend_descend(obs, init_values, args, n_iter = 5000, lr = 0.003, 
         for i in range(len(cur_params)):
             new_params[i] = new_params_meta[circuit.meta_idxs[i]]
 
-        if config.max_energy_increase_threshold is None:
-            circuit.set_parameters(new_params)
-        else:
-
-            if len(energies) > 0 and circuit.energy > energies[-1] + config.max_energy_increase_threshold:
-                circuit.set_parameters(parameters[-1])
-                print('energy increase over threshold: from', energies[-1] - hamiltonian.energy_renorm, ' to ', circuit.energy - hamiltonian.energy_renorm)
-            else:
-                circuit.set_parameters(new_params)
+        circuit.set_parameters(new_params)
 
         energies.append(circuit.energy if config.N_samples is not None else circuit.energy_exact)
         parameters.append(circuit.get_parameters())
